@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { agentSchema } from '@/lib/validations/agent'
 
 // Next.js App Router automatically returns 405 for methods that have no
 // named export, but these explicit handlers ensure the response is JSON
@@ -33,43 +34,33 @@ export async function POST(request: Request) {
 
     // ── Validation ──────────────────────────────────────────────────
     const body = await request.json()
-    const { name, description, personality, goal } = body
+    const result = agentSchema.safeParse(body)
 
-    // Collect every empty field so the error message names them all at once.
-    // .trim() is essential — a field filled with spaces must count as missing.
-    const missing = (
-      [
-        ['name',        name],
-        ['description', description],
-        ['personality', personality],
-        ['goal',        goal],
-      ] as [string, unknown][]
-    )
-      .filter(([, v]) => !v || !String(v).trim())
-      .map(([k]) => k)
-
-    if (missing.length > 0) {
+    if (!result.success) {
       return NextResponse.json(
-        { error: `Missing required fields: ${missing.join(', ')}.` },
+        {
+          error:  'Validation failed.',
+          // flatten() gives { fieldErrors: { name?: string[], ... } }
+          // — each field maps to an array of error messages.
+          fields: result.error.flatten().fieldErrors,
+        },
         { status: 400 }
       )
     }
 
+    // result.data is fully typed and already trimmed by the schema.
+    const { name, description, personality, goal } = result.data
+
     // ── Database ────────────────────────────────────────────────────
-    // Inner try/catch keeps DB errors separate from unexpected errors so
-    // we can return a specific 500 message rather than the generic fallback.
     let agent
     try {
       const { data, error } = await supabase
         .from('agents')
         .insert({
           user_id:     user.id,
-          name:        String(name).trim(),
-          description: String(description).trim(),
-          config: {
-            personality: String(personality).trim(),
-            goal:        String(goal).trim(),
-          },
+          name,
+          description,
+          config: { personality, goal },
         })
         .select()   // return the inserted row
         .single()   // unwrap the array into a single object

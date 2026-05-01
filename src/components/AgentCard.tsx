@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 
 const PERSONALITY_BADGE: Record<string, string> = {
@@ -37,35 +36,11 @@ interface AgentCardProps {
 export default function AgentCard({
   id, name, description, personality, createdAt, onDelete,
 }: AgentCardProps) {
-  const [isDeleting, setIsDeleting]   = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-
   const badgeCls = PERSONALITY_BADGE[personality]
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
-
-    setIsDeleting(true)
-    setDeleteError(null)
-
-    try {
-      const res = await fetch(`/api/agents/${id}`, { method: 'DELETE' })
-
-      if (!res.ok) {
-        setDeleteError('Failed to delete agent — please try again.')
-        return
-      }
-
-      // Notify parent to remove this card from the list
-      onDelete?.(id)
-    } catch {
-      // fetch() itself throws only on network failure (no internet, server unreachable)
-      setDeleteError('Failed to delete agent — please try again.')
-    } finally {
-      // Always re-enable the button — even if the component is about to unmount,
-      // React 18 handles state updates on unmounted components safely.
-      setIsDeleting(false)
-    }
+    onDelete?.(id)
   }
 
   return (
@@ -105,20 +80,12 @@ export default function AgentCard({
 
           <button
             onClick={handleDelete}
-            disabled={isDeleting}
-            className="text-xs font-medium text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-950/60 px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-950/40 disabled:hover:text-red-400"
+            className="text-xs font-medium text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-950/60 px-2.5 py-1.5 rounded-lg transition-all"
           >
-            {isDeleting ? 'Deleting…' : 'Delete'}
+            Delete
           </button>
         </div>
       </div>
-
-      {/* Inline error — only visible after a failed delete attempt */}
-      {deleteError && (
-        <p className="mt-3 text-red-400 text-xs">
-          {deleteError}
-        </p>
-      )}
 
     </div>
   )

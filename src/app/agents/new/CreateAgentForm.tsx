@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-
-const PERSONALITIES = ['Professional', 'Friendly', 'Direct', 'Creative', 'Empathetic'] as const
+import { agentSchema, PERSONALITIES } from '@/lib/validations/agent'
 
 type FieldErrors = Partial<Record<'name' | 'description' | 'personality' | 'goal', string>>
 
@@ -71,25 +70,18 @@ export default function CreateAgentForm() {
   const [banner, setBanner] = useState<Banner | null>(null)
 
   function validate(): FieldErrors {
-    const errors: FieldErrors = {}
-    const n = name.trim()
-    const d = description.trim()
-    const g = goal.trim()
+    const result = agentSchema.safeParse({ name, description, personality, goal })
+    if (result.success) return {}
 
-    if (!n) errors.name = 'Agent name is required.'
-    else if (n.length < 3) errors.name = 'Name must be at least 3 characters.'
-    else if (n.length > 50) errors.name = 'Name must be 50 characters or fewer.'
-
-    if (!d) errors.description = 'Description is required.'
-    else if (d.length < 10) errors.description = 'Description must be at least 10 characters.'
-    else if (d.length > 200) errors.description = 'Description must be 200 characters or fewer.'
-
-    if (!personality) errors.personality = 'Please select a personality.'
-
-    if (!g) errors.goal = 'Goal is required.'
-    else if (g.length > 150) errors.goal = 'Goal must be 150 characters or fewer.'
-
-    return errors
+    const flat = result.error.flatten().fieldErrors
+    return {
+      name:        flat.name?.[0],
+      description: flat.description?.[0],
+      // Map any enum error to a plain message — Zod's default includes the full
+      // list of allowed values which is too verbose for a dropdown.
+      personality: flat.personality?.length ? 'Please select a valid personality.' : undefined,
+      goal:        flat.goal?.[0],
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
