@@ -7,9 +7,10 @@
 - Week 2: JavaScript/TypeScript fundamentals covered; built a To-Do app, three React components (AgentCard, MessageCounter, AgentList), and practised Tailwind CSS styling.
 - Week 3: Next.js scaffold built with real landing page, Navbar/Footer components, App Router structure understood, and git branching workflow established.
 - Week 4: Connected AgentForge to a live Supabase backend with real auth (signup, login, signout, session management via `proxy.ts` and Server Actions), the `agents` table with five RLS policies, and a `messages` table with INSERT/SELECT policies. The profile page displays the user's email, formatted join date (`Intl.DateTimeFormat`), and live agent count fetched server-side.
+- Week 5: Built the full CRUD skeleton — Create Agent form, REST API routes (POST/DELETE with 401/403/404/500 handling), server-side dashboard with real Supabase fetching, `/agents/[id]` detail page, and shared Zod schema as single source of truth for form and API validation. Key patterns established: AgentGrid Client Component bridging the Server/Client boundary; personality/goal stored in a `config` jsonb column; optimistic delete with toast rollback.
 
-## Current Focus (Week 5)
-Connecting the UI to the database — building the Create Agent form, displaying real agents on the dashboard with server-side fetching, and understanding the difference between Server and Client Components.
+## Current Focus (Week 6)
+Integrating the Claude AI API to power real agent conversations — wiring up a chat interface on `/agents/[id]`, streaming responses, and validating environment variables with Zod.
 
 ## Memory Rules (Claude must always follow these)
 - If any @-imported file exceeds 40k characters, flag it and suggest archiving it

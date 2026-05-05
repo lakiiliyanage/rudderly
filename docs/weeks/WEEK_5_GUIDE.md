@@ -270,7 +270,8 @@ If the row appears in Supabase — you just built your first full-stack data pip
 | Test | How to trigger it | What you should see |
 |------|-------------------|---------------------|
 | Network failure | Turn off your internet, submit the form | 'Connection failed' message, button resets, fields preserved |
-| Invalid Supabase URL | Change `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` to a fake value, restart dev server, submit | Error banner shown, button resets |
+| API route returns 500 | In `src/app/api/agents/route.ts`, temporarily add `return NextResponse.json({ error: 'Forced error' }, { status: 500 })` as the first line of the POST handler, restart dev server, submit a valid form | Error banner shown, button resets, fields preserved. Remove the forced error after testing. |
+| Broken Supabase URL | Change `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` to a fake value, restart dev server, visit `/agents/new` | You will be redirected to `/auth/login` — this is correct. The broken URL causes the page-level auth check to fail before the form even renders. This tests a different layer than form submission error handling. Restore the URL after. |
 | Session expired | Sign out in another tab, go back to the form tab and submit | Session expired message with link to sign in |
 | Empty fields | Submit with one or more fields blank | Validation error shown, form does not call the API |
 
@@ -685,7 +686,8 @@ Run these manually to confirm everything works end-to-end:
 | Submit form with all valid fields | Fill all fields correctly, click Save | Agent on `/dashboard`, row in Supabase |
 | Submit form with an empty name | Leave Name blank, click Save | Inline error shown, API not called |
 | Submit form with no internet | Turn off wifi, click Save | 'Connection failed' banner, button resets, fields preserved |
-| Submit form with broken Supabase URL | Corrupt `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` | Error banner shown, no crash, button resets |
+| API route forced 500 | Add `return NextResponse.json({error:'Forced error'},{status:500})` as first line of POST handler, submit valid form | Error banner shown, no crash, button resets. Remove after testing. |
+| Broken Supabase URL | Corrupt `NEXT_PUBLIC_SUPABASE_URL` in `.env.local`, restart, visit `/agents/new` | Redirected to `/auth/login` — correct. Auth check fails before form renders. Restore URL after. |
 | Session expires mid-form | Sign out in another tab, submit from original tab | Session expired message with sign-in link |
 | Create agent as User A, log in as User B | Two test accounts | User B sees zero agents |
 | Click Delete on an agent card | Click Delete | Card gone, row deleted from Supabase |
