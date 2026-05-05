@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import DeleteButton from './DeleteButton'
+import ChatPanel from './ChatPanel'
 
 interface AgentPageProps {
   params: Promise<{ id: string }>
@@ -105,32 +106,8 @@ export default async function AgentPage({ params }: AgentPageProps) {
         </div>
       )}
 
-      {/* ── Chat placeholder ── */}
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-
-        {/* Chat header bar */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-800">
-          <div className="w-2 h-2 rounded-full bg-violet-500" />
-          <span className="text-sm font-medium text-white">Chat with {agent.name ?? 'Agent'}</span>
-          <span className="ml-auto text-xs text-gray-600 bg-gray-800 px-2.5 py-1 rounded-full">
-            Coming soon
-          </span>
-        </div>
-
-        {/* Placeholder body */}
-        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-          <div className="w-14 h-14 bg-violet-600/10 rounded-2xl flex items-center justify-center mb-5">
-            <svg className="w-7 h-7 text-violet-400/60" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-            </svg>
-          </div>
-          <p className="text-white font-semibold mb-1">AI integration coming in Week 6</p>
-          <p className="text-gray-500 text-sm max-w-xs">
-            Once connected, you&apos;ll be able to chat with your agent directly from this page.
-          </p>
-        </div>
-
-      </div>
+      {/* ── Chat ── */}
+      <ChatPanel agentId={id} agentName={agent.name ?? 'Agent'} />
     </div>
   )
 }
