@@ -71,28 +71,47 @@ export async function POST(request: Request) {
       `You are ${agent.name}. ${agent.description}. ` +
       `Your personality: ${personality}. Your goal: ${goal}.`
 
-    // ── Anthropic call ────────────────────────────────────────────────
-    let reply: string
-    try {
-      const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+    // ── Stream to client ──────────────────────────────────────────────
+    // messages.stream() opens a persistent connection to Anthropic and
+    // yields RawMessageStreamEvent objects as the model generates text.
+    // We pipe only the text deltas into a ReadableStream so the client
+    // receives plain text chunks, not raw SSE events.
+    const anthropic       = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+    const anthropicStream = anthropic.messages.stream({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system:     systemPrompt,
+      messages,
+    })
 
-      const response = await anthropic.messages.create({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        system:     systemPrompt,
-        messages,
-      })
+    const encoder = new TextEncoder()
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const event of anthropicStream) {
+            if (
+              event.type === 'content_block_delta' &&
+              event.delta.type === 'text_delta'
+            ) {
+              controller.enqueue(encoder.encode(event.delta.text))
+            }
+          }
+        } catch (err) {
+          console.error('[chat] Anthropic stream error:', err)
+        } finally {
+          controller.close()
+        }
+      },
+      // Called when the client disconnects or calls reader.cancel() —
+      // tells the Anthropic SDK to abort the upstream request.
+      cancel() {
+        anthropicStream.abort()
+      },
+    })
 
-      reply = (response.content[0] as Anthropic.TextBlock).text
-    } catch (error) {
-      console.error('[chat] Anthropic API error:', error)
-      return NextResponse.json(
-        { error: "We're having trouble connecting to our AI service right now. Please try again in a moment." },
-        { status: 503 }
-      )
-    }
-
-    return NextResponse.json({ reply }, { status: 200 })
+    return new Response(readable, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
 
   } catch (error) {
     console.error('[chat] Unexpected error:', error)

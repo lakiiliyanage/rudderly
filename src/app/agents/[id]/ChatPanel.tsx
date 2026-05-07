@@ -14,12 +14,13 @@ export default function ChatPanel({
   agentId: string
   agentName: string
 }) {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const bottomRef               = useRef<HTMLDivElement>(null)
-  const abortRef                = useRef<AbortController | null>(null)
+  const [messages,     setMessages]     = useState<Message[]>([])
+  const [input,        setInput]        = useState('')
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
+  const [interrupted,  setInterrupted]  = useState(false)
+  const bottomRef                       = useRef<HTMLDivElement>(null)
+  const abortRef                        = useRef<AbortController | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -36,38 +37,68 @@ export default function ChatPanel({
     setInput('')
     setLoading(true)
     setError(null)
+    setInterrupted(false)
 
     const controller  = new AbortController()
     abortRef.current  = controller
 
+    // Declared outside try so the catch block can read it to decide whether
+    // a network error interrupted a partial reply or a blank response.
+    let fullContent = ''
+
     try {
-      const res  = await fetch('/api/chat', {
+      const res = await fetch('/api/chat', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ agentId, messages: nextMessages }),
         signal:  controller.signal,
       })
 
-      const data = await res.json()
-
+      // Error responses are still JSON — parse them before reading the body
+      // as a stream, because you can only consume a response body once.
       if (!res.ok) {
+        const data = await res.json()
         setMessages(messages)
         setInput(text)
-        setError(data.error ?? 'Something went wrong. Please try again.')
+        if (res.status === 429) {
+          setError('Too many messages — please wait a moment before sending again.')
+        } else if (res.status === 500) {
+          setError('Something went wrong on our end. Try again in a moment.')
+        } else {
+          setError(data.error ?? 'Something went wrong. Please try again.')
+        }
         return
       }
 
-      setMessages([...nextMessages, { role: 'assistant', content: data.reply }])
+      const reader  = res.body!.getReader()
+      const decoder = new TextDecoder()
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        // { stream: true } keeps the decoder's internal buffer across calls
+        // so multi-byte characters split across chunk boundaries decode correctly.
+        fullContent += decoder.decode(value, { stream: true })
+
+        setMessages([...nextMessages, { role: 'assistant', content: fullContent }])
+      }
     } catch (err) {
-      // AbortError = user clicked Stop intentionally — roll back silently.
       if (err instanceof DOMException && err.name === 'AbortError') {
-        setMessages(messages)
-        setInput(text)
+        // User clicked Stop — keep whatever arrived, no error, no rollback.
+        // The input was already cleared when Send was clicked; leave it clear.
         return
       }
-      setMessages(messages)
-      setInput(text)
-      setError('Network error — please check your connection and try again.')
+
+      if (fullContent) {
+        // Stream dropped mid-reply — keep the partial text, flag it as interrupted.
+        setInterrupted(true)
+      } else {
+        // Nothing arrived at all — connection failed before the stream opened.
+        setMessages(messages)
+        setInput(text)
+        setError('Connection lost — check your internet and retry.')
+      }
     } finally {
       setLoading(false)
       abortRef.current = null
@@ -76,6 +107,13 @@ export default function ChatPanel({
 
   function handleStop() {
     abortRef.current?.abort()
+  }
+
+  function handleNewConversation() {
+    if (!window.confirm('Are you sure? This will clear the conversation.')) return
+    setMessages([])
+    setError(null)
+    setInterrupted(false)
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -92,6 +130,15 @@ export default function ChatPanel({
       <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-800 shrink-0">
         <div className="w-2 h-2 rounded-full bg-violet-500" />
         <span className="text-sm font-medium text-white">Chat with {agentName}</span>
+        {messages.length > 0 && (
+          <button
+            onClick={handleNewConversation}
+            disabled={loading}
+            className="ml-auto text-xs text-gray-500 hover:text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            New conversation
+          </button>
+        )}
       </div>
 
       {/* ── Error banner ───────────────────────────────────────────────── */}
@@ -100,7 +147,16 @@ export default function ChatPanel({
           <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
-          {error}
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+            className="shrink-0 text-red-400 hover:text-red-200 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -130,8 +186,17 @@ export default function ChatPanel({
           </div>
         ))}
 
-        {/* Typing indicator while waiting for AI reply */}
-        {loading && (
+        {/* Interrupted notice — shown inline below a partial AI reply after a
+            network drop, not for user-initiated stops. Clears on next send. */}
+        {interrupted && messages.at(-1)?.role === 'assistant' && (
+          <div className="flex justify-start">
+            <p className="text-xs text-gray-500 italic pl-1">Response interrupted — please retry.</p>
+          </div>
+        )}
+
+        {/* Typing indicator — only while loading AND before the first chunk
+            arrives. Once setMessages adds the assistant bubble, this hides. */}
+        {loading && messages.at(-1)?.role !== 'assistant' && (
           <div className="flex justify-start">
             <div className="bg-gray-800 rounded-2xl rounded-bl-sm px-4 py-3.5">
               <div className="flex gap-1.5 items-center">
@@ -181,7 +246,33 @@ export default function ChatPanel({
             </button>
           )}
         </div>
-        <p className="text-gray-600 text-xs mt-2 pl-1">Enter to send · Shift+Enter for a new line</p>
+        {/*
+          TOKENS & CONTEXT WINDOW
+          LLMs don't process raw characters — they break text into tokens (roughly
+          3-4 characters each for English). Every message in the conversation history
+          is sent to the API on each request and counts toward the model's context
+          window: the maximum amount of text it can hold in "working memory" at once.
+          claude-haiku-4-5 has a 200 000-token context window (~150 000 words), so a
+          normal conversation won't hit it. The 4 000-character limit here is a
+          per-message guardrail: a single massive input would consume a
+          disproportionate share of the window and degrade the quality of replies.
+        */}
+        <div className="flex items-center justify-between mt-2 px-1">
+          {input.trim().length > 4000 ? (
+            <p className="text-xs text-yellow-500/80">
+              Your message is very long — this may affect response quality.
+            </p>
+          ) : (
+            <p className="text-gray-600 text-xs">Enter to send · Shift+Enter for a new line</p>
+          )}
+          <p className={`text-xs tabular-nums ${
+            input.length >= 3800 ? 'text-red-400'         :
+            input.length >= 3000 ? 'text-yellow-500/80'   :
+                                   'text-gray-600'
+          }`}>
+            {input.length} / 4000
+          </p>
+        </div>
       </div>
 
     </div>
