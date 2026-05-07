@@ -8,9 +8,10 @@
 - Week 3: Next.js scaffold built with real landing page, Navbar/Footer components, App Router structure understood, and git branching workflow established.
 - Week 4: Connected AgentForge to a live Supabase backend with real auth (signup, login, signout, session management via `proxy.ts` and Server Actions), the `agents` table with five RLS policies, and a `messages` table with INSERT/SELECT policies. The profile page displays the user's email, formatted join date (`Intl.DateTimeFormat`), and live agent count fetched server-side.
 - Week 5: Built the full CRUD skeleton — Create Agent form, REST API routes (POST/DELETE with 401/403/404/500 handling), server-side dashboard with real Supabase fetching, `/agents/[id]` detail page, and shared Zod schema as single source of truth for form and API validation. Key patterns established: AgentGrid Client Component bridging the Server/Client boundary; personality/goal stored in a `config` jsonb column; optimistic delete with toast rollback.
+- Week 6: Integrated the Anthropic SDK to power real streaming conversations — `src/lib/env.ts` validates all required env vars at startup with Zod, and `/api/chat/route.ts` authenticates requests, checks agent ownership, builds a system prompt from the agent's config, and streams responses via `ReadableStream`. `ChatPanel.tsx` reads the stream chunk-by-chunk with `getReader()`, supports an AbortController-backed Stop button, handles 429/500/network errors with status-specific messages, keeps partial replies on interruption, and includes a character counter with a tokens/context-window explanation in comments.
 
-## Current Focus (Week 6)
-Integrating the Claude AI API to power real agent conversations — wiring up a chat interface on `/agents/[id]`, streaming responses, and validating environment variables with Zod.
+## Current Focus (Week 7)
+Persisting conversation history to Supabase — saving messages to a `conversations` table, loading prior history on page visit, and managing context window limits as conversations grow.
 
 ## Memory Rules (Claude must always follow these)
 - If any @-imported file exceeds 40k characters, flag it and suggest archiving it
