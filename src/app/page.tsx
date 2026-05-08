@@ -1,5 +1,5 @@
 import Link from "next/link"
-import Button from "@/components/ui/Button"
+import { Button } from "@/components/ui/button"
 
 export default function HomePage() {
   return (
@@ -32,11 +32,11 @@ export default function HomePage() {
 
         {/* CTA buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Button variant="primary" size="lg" href="/auth/signup">
-            Get Started Free
+          <Button asChild size="lg">
+            <Link href="/auth/signup">Get Started Free</Link>
           </Button>
-          <Button variant="secondary" size="lg" href="#">
-            View on GitHub
+          <Button asChild variant="secondary" size="lg">
+            <Link href="#">View on GitHub</Link>
           </Button>
         </div>
       </section>

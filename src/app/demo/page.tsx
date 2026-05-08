@@ -1,4 +1,5 @@
-import Button from "@/components/ui/Button"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -19,34 +20,36 @@ export default function DemoPage() {
         </p>
 
         <Section title="Variants">
-          <Button variant="primary">Primary</Button>
+          <Button>Default</Button>
           <Button variant="secondary">Secondary</Button>
           <Button variant="ghost">Ghost</Button>
+          <Button variant="outline">Outline</Button>
+          <Button variant="destructive">Destructive</Button>
         </Section>
 
         <Section title="Sizes">
           <Button size="sm">Small</Button>
-          <Button size="md">Medium</Button>
+          <Button>Default</Button>
           <Button size="lg">Large</Button>
         </Section>
 
         <Section title="Disabled">
-          <Button variant="primary" disabled>Primary</Button>
+          <Button disabled>Default</Button>
           <Button variant="secondary" disabled>Secondary</Button>
           <Button variant="ghost" disabled>Ghost</Button>
         </Section>
 
-        <Section title="As Link (href prop)">
-          <Button href="/" variant="primary">Go Home</Button>
-          <Button href="/dashboard" variant="secondary">Dashboard</Button>
-          <Button href="/auth/signup" variant="ghost">Sign Up</Button>
+        <Section title="As Link (asChild + Link)">
+          <Button asChild><Link href="/">Go Home</Link></Button>
+          <Button asChild variant="secondary"><Link href="/dashboard">Dashboard</Link></Button>
+          <Button asChild variant="ghost"><Link href="/auth/signup">Sign Up</Link></Button>
         </Section>
 
         <Section title="Real AgentForge usage">
-          <Button variant="primary" size="lg" href="/auth/signup">Get Started Free</Button>
+          <Button asChild size="lg"><Link href="/auth/signup">Get Started Free</Link></Button>
           <Button variant="secondary" size="lg">View on GitHub</Button>
           <Button variant="ghost" size="sm">Cancel</Button>
-          <Button variant="primary" size="sm" disabled>Saving...</Button>
+          <Button size="sm" disabled>Saving...</Button>
         </Section>
       </div>
     </main>

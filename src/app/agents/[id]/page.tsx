@@ -11,14 +11,10 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import DeleteButton from './DeleteButton'
 import ChatPanel from './ChatPanel'
+import type { AgentConfig } from '@/lib/types/agent'
 
 interface AgentPageProps {
   params: Promise<{ id: string }>
-}
-
-type AgentConfig = {
-  personality?: string
-  goal?: string
 }
 
 export default async function AgentPage({ params }: AgentPageProps) {
@@ -88,23 +84,10 @@ export default async function AgentPage({ params }: AgentPageProps) {
         </div>
       </div>
 
-      {/* ── Config details (only shown when values exist) ── */}
-      {(config.personality || config.goal) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-          {config.personality && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Personality</p>
-              <p className="text-gray-300 text-sm leading-relaxed">{config.personality}</p>
-            </div>
-          )}
-          {config.goal && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Goal</p>
-              <p className="text-gray-300 text-sm leading-relaxed">{config.goal}</p>
-            </div>
-          )}
-        </div>
-      )}
+      {/* ── Config details ── */}
+      {/* TODO: render config.type, config.personality.tone/verbosity,
+          config.capabilities, and config.limits once the agent edit form
+          is updated to write the full AgentConfig shape */}
 
       {/* ── Chat ── */}
       <ChatPanel agentId={id} agentName={agent.name ?? 'Agent'} />
