@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
+import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
+import type { AgentConfig } from '@/lib/types/agent'
 
 const methodNotAllowed = () =>
   NextResponse.json(
@@ -65,11 +67,11 @@ export async function POST(request: Request) {
     }
 
     // ── System prompt ─────────────────────────────────────────────────
-    const { personality, goal } = agent.config as { personality: string; goal: string }
-
-    const systemPrompt =
-      `You are ${agent.name}. ${agent.description}. ` +
-      `Your personality: ${personality}. Your goal: ${goal}.`
+    const systemPrompt = buildSystemPrompt(
+      agent.name,
+      agent.description ?? '',
+      agent.config as AgentConfig
+    )
 
     // ── Stream to client ──────────────────────────────────────────────
     // messages.stream() opens a persistent connection to Anthropic and

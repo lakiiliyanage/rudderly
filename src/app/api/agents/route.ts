@@ -48,8 +48,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // result.data is fully typed and already trimmed by the schema.
-    const { name, description, personality, goal } = result.data
+    const { name, description, config } = result.data
 
     // ── Database ────────────────────────────────────────────────────
     let agent
@@ -57,10 +56,10 @@ export async function POST(request: Request) {
       const { data, error } = await supabase
         .from('agents')
         .insert({
-          user_id:     user.id,
+          user_id: user.id,
           name,
           description,
-          config: { personality, goal },
+          config,
         })
         .select()   // return the inserted row
         .single()   // unwrap the array into a single object

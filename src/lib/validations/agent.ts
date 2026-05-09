@@ -1,37 +1,28 @@
 import { z } from 'zod'
 
-export const PERSONALITIES = [
-  'Professional',
-  'Friendly',
-  'Direct',
-  'Creative',
-  'Empathetic',
-] as const
-
-// Single source of truth for agent validation rules.
-// Imported by the form (client-side) and the API route (server-side) so the
-// rules can never drift apart between the two.
-export const agentSchema = z.object({
-  name: z.string()
-    .trim()
-    .min(3,  'Name must be at least 3 characters.')
-    .max(50, 'Name must be 50 characters or fewer.'),
-
-  description: z.string()
-    .trim()
-    .min(10,  'Description must be at least 10 characters.')
-    .max(200, 'Description must be 200 characters or fewer.'),
-
-  // z.enum() enforces the exact set of allowed values at the type level.
-  // Any value outside this tuple — including an empty string — fails parsing.
-  personality: z.enum(PERSONALITIES),
-
-  goal: z.string()
-    .trim()
-    .min(5,   'Goal must be at least 5 characters.')
-    .max(150, 'Goal must be 150 characters or fewer.'),
+const agentConfigSchema = z.object({
+  type: z.enum(['customer-support', 'research', 'personal-assistant', 'custom']),
+  personality: z.object({
+    tone:           z.number().min(0).max(100),
+    verbosity:      z.number().min(0).max(100),
+    examplePhrases: z.array(z.string()),
+  }),
+  capabilities: z.object({
+    webSearch:  z.boolean(),
+    email:      z.boolean(),
+    calendar:   z.boolean(),
+    calculator: z.boolean(),
+  }),
+  limits: z.object({
+    maxMessageLength: z.number().min(50).max(10_000),
+    avoidTopics:      z.array(z.string()),
+  }),
 })
 
-// Infer the TypeScript type directly from the schema — no manual interface needed.
-// result.data will always match this type when safeParse() succeeds.
+export const agentSchema = z.object({
+  name:        z.string().trim().min(1, 'Name is required.').max(50, 'Name must be 50 characters or fewer.'),
+  description: z.string().trim().max(200, 'Description must be 200 characters or fewer.').default(''),
+  config:      agentConfigSchema,
+})
+
 export type AgentFormData = z.infer<typeof agentSchema>
