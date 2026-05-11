@@ -11,14 +11,18 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import DeleteButton from './DeleteButton'
 import ChatPanel from './ChatPanel'
+import CreatedBanner from './CreatedBanner'
 import type { AgentConfig } from '@/lib/types/agent'
 
 interface AgentPageProps {
-  params: Promise<{ id: string }>
+  params:       Promise<{ id: string }>
+  searchParams: Promise<{ created?: string }>
 }
 
-export default async function AgentPage({ params }: AgentPageProps) {
-  const { id } = await params
+export default async function AgentPage({ params, searchParams }: AgentPageProps) {
+  const { id }      = await params
+  const { created } = await searchParams
+  const showCreatedBanner = created === 'true'
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -34,12 +38,21 @@ export default async function AgentPage({ params }: AgentPageProps) {
   if (!agent) notFound()
 
   const config = (agent.config ?? {}) as AgentConfig
+  const capabilityCount = config.capabilities
+    ? Object.values(config.capabilities).filter(Boolean).length
+    : 0
+
   const date = new Intl.DateTimeFormat('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   }).format(new Date(agent.created_at))
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-10">
+
+      {/* ── Created banner ── */}
+      {showCreatedBanner && (
+        <CreatedBanner agentName={agent.name ?? 'Agent'} capabilityCount={capabilityCount} />
+      )}
 
       {/* ── Back link ── */}
       <Link

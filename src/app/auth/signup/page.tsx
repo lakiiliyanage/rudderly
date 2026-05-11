@@ -3,6 +3,7 @@
 import { useActionState, useEffect } from 'react'
 import Link from 'next/link'
 import { signup } from '../actions'
+import { Button } from '@/components/ui/button'
 
 export default function SignupPage() {
   const [state, action, pending] = useActionState(signup, undefined)
@@ -88,10 +89,10 @@ export default function SignupPage() {
             )}
 
             {/* Submit button */}
-            <button
+            <Button
               type="submit"
               disabled={pending || !!(state && 'message' in state)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-violet-600 hover:bg-violet-500 active:scale-[0.98] text-white font-medium text-sm rounded-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
+              className="w-full gap-2 bg-violet-600 hover:bg-violet-500 active:scale-[0.98]"
             >
               {pending && (
                 <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
@@ -100,7 +101,7 @@ export default function SignupPage() {
                 </svg>
               )}
               {pending ? 'Creating account…' : 'Create account'}
-            </button>
+            </Button>
 
           </form>
         </div>

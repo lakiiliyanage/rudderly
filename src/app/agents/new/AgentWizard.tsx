@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Progress } from '@/components/ui/progress'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,23 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import type { AgentConfig } from '@/lib/types/agent'
+
+const DRAFT_KEY = 'agentforge_draft'
+
+interface Draft {
+  agentConfig:      AgentConfig
+  currentStep:      number
+  typeSelected:     boolean
+  agentName:        string
+  agentDescription: string
+  savedAt:          string
+}
+
+function formatDraftTime(iso: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  }).format(new Date(iso))
+}
 
 const TOTAL_STEPS = 5
 
@@ -82,6 +100,7 @@ export default function AgentWizard() {
   const router = useRouter()
 
   const [currentStep, setCurrentStep] = useState(1)
+  const [direction, setDirection]         = useState(1)
   const [agentConfig, setAgentConfig] = useState<AgentConfig>(defaultConfig)
   const [typeSelected, setTypeSelected]   = useState(false)
   const [showTypeError, setShowTypeError] = useState(false)
@@ -92,6 +111,51 @@ export default function AgentWizard() {
   const [showNameError, setShowNameError]   = useState(false)
   const [showSaveError, setShowSaveError]   = useState(false)
   const [isSaving, setIsSaving]             = useState(false)
+
+  // ── Draft / auto-save ─────────────────────────────────────────────────────
+  const [draft, setDraft] = useState<Draft | null>(null)
+
+  // Ref always holds the latest values so the interval closure never goes stale.
+  const draftRef = useRef({ agentConfig, currentStep, typeSelected, agentName, agentDescription })
+  useEffect(() => {
+    draftRef.current = { agentConfig, currentStep, typeSelected, agentName, agentDescription }
+  }, [agentConfig, currentStep, typeSelected, agentName, agentDescription])
+
+  // Load any existing draft on first render.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (raw) setDraft(JSON.parse(raw) as Draft)
+    } catch {
+      localStorage.removeItem(DRAFT_KEY)
+    }
+  }, [])
+
+  // Auto-save every 30 seconds.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { agentConfig, currentStep, typeSelected, agentName, agentDescription } = draftRef.current
+      const payload: Draft = { agentConfig, currentStep, typeSelected, agentName, agentDescription, savedAt: new Date().toISOString() }
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  function handleResumeDraft() {
+    if (!draft) return
+    setAgentConfig(draft.agentConfig)
+    setCurrentStep(draft.currentStep)
+    setTypeSelected(draft.typeSelected)
+    setAgentName(draft.agentName)
+    setAgentDescription(draft.agentDescription)
+    setDraft(null)
+  }
+
+  function handleStartFresh() {
+    localStorage.removeItem(DRAFT_KEY)
+    setDraft(null)
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const progressValue = ((currentStep - 1) / (TOTAL_STEPS - 1)) * 100
 
@@ -119,6 +183,7 @@ export default function AgentWizard() {
   }
 
   function handleBack() {
+    setDirection(-1)
     setCurrentStep(s => Math.max(1, s - 1))
     setShowTypeError(false)
   }
@@ -129,6 +194,7 @@ export default function AgentWizard() {
       return
     }
     setShowTypeError(false)
+    setDirection(1)
     setCurrentStep(s => Math.min(TOTAL_STEPS, s + 1))
   }
 
@@ -158,7 +224,8 @@ export default function AgentWizard() {
       }
 
       const agent = await res.json()
-      router.push(`/agents/${agent.id}`)
+      localStorage.removeItem(DRAFT_KEY)
+      router.push(`/agents/${agent.id}?created=true`)
     } catch {
       setShowSaveError(true)
     } finally {
@@ -167,6 +234,13 @@ export default function AgentWizard() {
   }
 
   const step = STEPS[currentStep - 1]
+
+  const slideVariants = {
+    enter: (dir: number) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit:  (dir: number) => ({ x: dir > 0 ? -60 : 60, opacity: 0 }),
+  }
+
   const limitsValid =
     agentConfig.limits.maxMessageLength >= 50 &&
     agentConfig.limits.maxMessageLength <= 10_000
@@ -175,7 +249,35 @@ export default function AgentWizard() {
     (currentStep === 4 && !limitsValid)
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-10">
+    <motion.div
+      className="max-w-5xl mx-auto px-6 py-10"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
+
+      {/* ── Draft resume banner ── */}
+      {draft && (
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-800/60 bg-amber-950/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-amber-300">
+            You have an unsaved draft from{' '}
+            <span className="font-medium">{formatDraftTime(draft.savedAt)}</span>
+            . Would you like to resume?
+          </p>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" onClick={handleResumeDraft} className="bg-amber-600 hover:bg-amber-500 text-white">
+              Resume draft
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleStartFresh} className="text-amber-400 hover:text-amber-200 hover:bg-amber-900/40">
+              Start fresh
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Two-column layout: wizard left, preview panel right on md+ */}
+      <div className="md:flex md:items-start md:gap-10">
+      <div className="flex-1 min-w-0">
 
       {/* Header */}
       <div className="mb-8">
@@ -203,33 +305,45 @@ export default function AgentWizard() {
       </div>
 
       {/* Step card */}
-      <Card className="bg-gray-900 border-gray-800 mb-8">
+      <Card className="bg-gray-900 border-gray-800 mb-24 sm:mb-8">
         <CardHeader>
           <CardTitle className="text-white">{step.title}</CardTitle>
           <CardDescription className="text-gray-400">{step.description}</CardDescription>
         </CardHeader>
-        <CardContent>
-          <StepContent
-            step={currentStep}
-            agentConfig={agentConfig}
-            setAgentConfig={setAgentConfig}
-            selectedType={typeSelected ? agentConfig.type : null}
-            onTypeSelect={handleTypeSelect}
-            onPersonalityChange={handlePersonalityChange}
-            onCapabilitiesChange={handleCapabilitiesChange}
-            onLimitsChange={handleLimitsChange}
-            agentName={agentName}
-            onNameChange={handleNameChange}
-            agentDescription={agentDescription}
-            onDescriptionChange={setAgentDescription}
-            showNameError={showNameError}
-            showTypeError={showTypeError}
-          />
+        <CardContent className="overflow-hidden">
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={currentStep}
+              custom={direction}
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.18, ease: 'easeInOut' }}
+            >
+              <StepContent
+                step={currentStep}
+                agentConfig={agentConfig}
+                setAgentConfig={setAgentConfig}
+                selectedType={typeSelected ? agentConfig.type : null}
+                onTypeSelect={handleTypeSelect}
+                onPersonalityChange={handlePersonalityChange}
+                onCapabilitiesChange={handleCapabilitiesChange}
+                onLimitsChange={handleLimitsChange}
+                agentName={agentName}
+                onNameChange={handleNameChange}
+                agentDescription={agentDescription}
+                onDescriptionChange={setAgentDescription}
+                showNameError={showNameError}
+                showTypeError={showTypeError}
+              />
+            </motion.div>
+          </AnimatePresence>
         </CardContent>
       </Card>
 
       {/* Navigation */}
-      <div>
+      <div className="fixed bottom-0 left-0 right-0 z-10 bg-gray-950 border-t border-gray-800 px-6 py-4 sm:static sm:border-0 sm:bg-transparent sm:p-0">
         {/* Save error — shown above nav buttons, only on step 5 */}
         {currentStep === TOTAL_STEPS && showSaveError && (
           <p className="mb-4 flex items-center gap-1.5 text-sm text-red-400">
@@ -275,7 +389,16 @@ export default function AgentWizard() {
           )}
         </div>
       </div>
-    </div>
+
+      </div>{/* end wizard column */}
+
+      <AgentPreviewPanel
+        agentConfig={agentConfig}
+        agentName={agentName}
+        typeSelected={typeSelected}
+      />
+      </div>{/* end two-column */}
+    </motion.div>
   )
 }
 
@@ -370,7 +493,7 @@ interface TypeSelectorStepProps {
 function TypeSelectorStep({ selectedType, onTypeSelect, showError }: TypeSelectorStepProps) {
   return (
     <div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {AGENT_TYPES.map(({ value, emoji, name, description }) => {
           const isSelected = selectedType === value
           return (
@@ -499,7 +622,7 @@ function PersonalityStep({ personality, onChange }: PersonalityStepProps) {
             onChange={e => setPhraseInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder='e.g. "Let me check that for you"'
-            className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-base text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
           <Button
             type="button"
@@ -652,7 +775,7 @@ function LimitsStep({ limits, onChange }: LimitsStepProps) {
             onChange={handleLengthChange}
             onBlur={() => setTouched(true)}
             placeholder="1000"
-            className={`w-32 rounded-lg border bg-gray-800 px-3 py-2 text-sm text-white tabular-nums focus:outline-none focus:ring-1 transition-colors ${
+            className={`w-32 rounded-lg border bg-gray-800 px-3 py-2 text-base text-white tabular-nums focus:outline-none focus:ring-1 transition-colors ${
               showLengthError
                 ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
                 : 'border-gray-700 focus:border-violet-500 focus:ring-violet-500'
@@ -690,7 +813,7 @@ function LimitsStep({ limits, onChange }: LimitsStepProps) {
             onChange={e => setTopicInput(e.target.value)}
             onKeyDown={handleTopicKeyDown}
             placeholder='e.g. "competitor pricing"'
-            className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+            className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-base text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
           <Button
             type="button"
@@ -759,6 +882,124 @@ function SliderField({ label, value, leftLabel, rightLabel, onChange }: SliderFi
   )
 }
 
+// ── Shared: Preview Dialog ────────────────────────────────────────────────────
+
+type PreviewMessage = { role: 'user' | 'assistant'; content: string }
+
+interface PreviewDialogProps {
+  agentConfig: AgentConfig
+  agentName:   string
+  trigger:     React.ReactNode
+}
+
+function PreviewDialog({ agentConfig, agentName, trigger }: PreviewDialogProps) {
+  const [messages, setMessages] = useState<PreviewMessage[]>([])
+  const [input, setInput]       = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+  const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  async function handleSend() {
+    const text = input.trim()
+    if (!text || loading) return
+    const userMsg: PreviewMessage = { role: 'user', content: text }
+    const updated = [...messages, userMsg]
+    setMessages(updated)
+    setInput('')
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/chat/preview', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          agentConfig,
+          agentName: agentName.trim() || 'Agent',
+          messages:  updated.map(m => ({ role: m.role, content: m.content })),
+        }),
+      })
+      if (!res.ok) { setError('Preview unavailable — try again in a moment.'); return }
+      const { reply } = await res.json()
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+    } catch {
+      setError('Preview unavailable — try again in a moment.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') { e.preventDefault(); handleSend() }
+  }
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg p-0 gap-0">
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-800">
+          <DialogTitle className="text-white text-base">
+            Test: {agentName.trim() || 'Your Agent'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3 overflow-y-auto px-5 py-4 h-72">
+          {messages.length === 0 && (
+            <p className="text-center text-xs text-gray-500 mt-8">
+              Send a message to test your agent&apos;s personality and behaviour.
+            </p>
+          )}
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                msg.role === 'user'
+                  ? 'bg-violet-600 text-white rounded-br-sm'
+                  : 'bg-gray-800 text-gray-100 rounded-bl-sm'
+              }`}>
+                {msg.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-800 rounded-2xl rounded-bl-sm px-3.5 py-2.5">
+                <span className="flex gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:0ms]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:300ms]" />
+                </span>
+              </div>
+            </div>
+          )}
+          {error && <p className="text-center text-xs text-red-400">{error}</p>}
+          <div ref={endRef} />
+        </div>
+        <div className="flex gap-2 border-t border-gray-800 px-4 py-3">
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={loading}
+            placeholder="Type a message..."
+            className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-base text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:opacity-50"
+          />
+          <Button
+            type="button"
+            onClick={handleSend}
+            disabled={loading || !input.trim()}
+            className="bg-violet-600 hover:bg-violet-500 shrink-0"
+          >
+            Send
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ── Step 5: Review & Save ─────────────────────────────────────────────────────
 
 interface ReviewStepProps {
@@ -770,8 +1011,6 @@ interface ReviewStepProps {
   agentConfig: AgentConfig
 }
 
-type PreviewMessage = { role: 'user' | 'assistant'; content: string }
-
 function ReviewStep({
   agentName,
   onNameChange,
@@ -780,59 +1019,6 @@ function ReviewStep({
   showNameError,
   agentConfig,
 }: ReviewStepProps) {
-  const [previewMessages, setPreviewMessages] = useState<PreviewMessage[]>([])
-  const [previewInput, setPreviewInput]       = useState('')
-  const [previewLoading, setPreviewLoading]   = useState(false)
-  const [previewError, setPreviewError]       = useState<string | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [previewMessages])
-
-  async function handlePreviewSend() {
-    const text = previewInput.trim()
-    if (!text || previewLoading) return
-
-    const userMsg: PreviewMessage    = { role: 'user', content: text }
-    const updated = [...previewMessages, userMsg]
-    setPreviewMessages(updated)
-    setPreviewInput('')
-    setPreviewLoading(true)
-    setPreviewError(null)
-
-    try {
-      const res = await fetch('/api/chat/preview', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          agentConfig,
-          agentName: agentName.trim() || 'Agent',
-          messages:  updated.map(m => ({ role: m.role, content: m.content })),
-        }),
-      })
-
-      if (!res.ok) {
-        setPreviewError('Preview unavailable — try again in a moment.')
-        return
-      }
-
-      const { reply } = await res.json()
-      setPreviewMessages(prev => [...prev, { role: 'assistant', content: reply }])
-    } catch {
-      setPreviewError('Preview unavailable — try again in a moment.')
-    } finally {
-      setPreviewLoading(false)
-    }
-  }
-
-  function handlePreviewKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handlePreviewSend()
-    }
-  }
-
   return (
     <div className="space-y-6">
 
@@ -851,7 +1037,7 @@ function ReviewStep({
           value={agentName}
           onChange={e => onNameChange(e.target.value.slice(0, 50))}
           placeholder="e.g. Support Bot, Research Helper"
-          className={`w-full rounded-lg border bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 transition-colors ${
+          className={`w-full rounded-lg border bg-gray-800 px-3 py-2 text-base text-white placeholder-gray-500 focus:outline-none focus:ring-1 transition-colors ${
             showNameError
               ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
               : 'border-gray-700 focus:border-violet-500 focus:ring-violet-500'
@@ -882,96 +1068,102 @@ function ReviewStep({
           onChange={e => onDescriptionChange(e.target.value.slice(0, 200))}
           placeholder="Describe what this agent does and who it's for..."
           rows={3}
-          className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
+          className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-base text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
         />
       </div>
 
       {/* Test dialog */}
       <div className="pt-2">
-        <Dialog>
-          <DialogTrigger asChild>
+        <PreviewDialog
+          agentConfig={agentConfig}
+          agentName={agentName}
+          trigger={
             <Button variant="secondary" type="button" className="gap-2">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
               </svg>
               Test your agent
             </Button>
-          </DialogTrigger>
-
-          <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg p-0 gap-0">
-            <DialogHeader className="px-5 pt-5 pb-4 border-b border-gray-800">
-              <DialogTitle className="text-white text-base">
-                Test: {agentName.trim() || 'Your Agent'}
-              </DialogTitle>
-            </DialogHeader>
-
-            {/* Message list */}
-            <div className="flex flex-col gap-3 overflow-y-auto px-5 py-4 h-72">
-              {previewMessages.length === 0 && (
-                <p className="text-center text-xs text-gray-500 mt-8">
-                  Send a message to test your agent's personality and behaviour.
-                </p>
-              )}
-
-              {previewMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
-                      msg.role === 'user'
-                        ? 'bg-violet-600 text-white rounded-br-sm'
-                        : 'bg-gray-800 text-gray-100 rounded-bl-sm'
-                    }`}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-
-              {previewLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-800 rounded-2xl rounded-bl-sm px-3.5 py-2.5">
-                    <span className="flex gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:0ms]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:150ms]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:300ms]" />
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {previewError && (
-                <p className="text-center text-xs text-red-400">{previewError}</p>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="flex gap-2 border-t border-gray-800 px-4 py-3">
-              <input
-                type="text"
-                value={previewInput}
-                onChange={e => setPreviewInput(e.target.value)}
-                onKeyDown={handlePreviewKeyDown}
-                disabled={previewLoading}
-                placeholder="Type a message..."
-                className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:opacity-50"
-              />
-              <Button
-                type="button"
-                onClick={handlePreviewSend}
-                disabled={previewLoading || !previewInput.trim()}
-                className="bg-violet-600 hover:bg-violet-500 shrink-0"
-              >
-                Send
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          }
+        />
       </div>
     </div>
+  )
+}
+
+// ── Agent Preview Panel ───────────────────────────────────────────────────────
+
+const TONE_LABEL = (v: number) => v < 30 ? 'formal' : v < 70 ? 'balanced' : 'casual'
+const VERBOSITY_LABEL = (v: number) => v < 30 ? 'concise' : v < 70 ? 'moderate' : 'detailed'
+
+interface AgentPreviewPanelProps {
+  agentConfig:  AgentConfig
+  agentName:    string
+  typeSelected: boolean
+}
+
+function AgentPreviewPanel({ agentConfig, agentName, typeSelected }: AgentPreviewPanelProps) {
+  const displayName        = agentName.trim() || 'Unnamed agent'
+  const selectedType       = typeSelected ? AGENT_TYPES.find(t => t.value === agentConfig.type) : null
+  const enabledCapabilities = CAPABILITIES.filter(({ key }) => agentConfig.capabilities[key])
+
+  return (
+    <aside className="hidden md:block w-64 shrink-0">
+      <div className="sticky top-8 rounded-xl border border-gray-800 bg-gray-900 p-5">
+        <p className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-4">Live preview</p>
+
+        {/* Name */}
+        <p className={`text-base font-semibold mb-3 truncate ${agentName.trim() ? 'text-white' : 'text-gray-600 italic'}`}>
+          {displayName}
+        </p>
+
+        {/* Type */}
+        {selectedType && (
+          <div className="mb-3">
+            <Badge variant="secondary" className="gap-1.5">
+              <span>{selectedType.emoji}</span>
+              <span>{selectedType.name}</span>
+            </Badge>
+          </div>
+        )}
+
+        {/* Personality */}
+        <p className="text-xs text-gray-500 mb-4">
+          Tone: <span className="text-gray-300">{TONE_LABEL(agentConfig.personality.tone)}</span>
+          {' · '}
+          Style: <span className="text-gray-300">{VERBOSITY_LABEL(agentConfig.personality.verbosity)}</span>
+        </p>
+
+        {/* Capabilities */}
+        {enabledCapabilities.length > 0 && (
+          <div className="mb-5">
+            <p className="text-xs font-medium text-gray-500 mb-2">Capabilities</p>
+            <div className="flex flex-wrap gap-1.5">
+              {enabledCapabilities.map(({ key, label }) => (
+                <Badge key={key} className="bg-violet-600/15 text-violet-300 border border-violet-700/40 text-xs">
+                  {label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Preview button */}
+        <div className={enabledCapabilities.length > 0 ? 'border-t border-gray-800 pt-4' : ''}>
+          <PreviewDialog
+            agentConfig={agentConfig}
+            agentName={agentName}
+            trigger={
+              <Button variant="secondary" type="button" className="w-full gap-2 text-sm">
+                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 01.778-.332 48.294 48.294 0 005.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                Preview conversation
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    </aside>
   )
 }

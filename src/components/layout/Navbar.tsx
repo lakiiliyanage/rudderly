@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -108,12 +109,14 @@ export default function Navbar({ initialLoggedIn = false }: { initialLoggedIn?: 
                 </svg>
                 Account
               </Link>
-              <button
+              <Button
                 onClick={handleSignOut}
-                className="text-sm bg-gray-800 hover:bg-gray-700 active:scale-95 text-gray-300 hover:text-white font-medium px-4 py-2 rounded-lg transition-all"
+                variant="outline"
+                size="sm"
+                className="border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-white active:scale-95"
               >
                 Sign Out
-              </button>
+              </Button>
             </>
           ) : (
             <Link

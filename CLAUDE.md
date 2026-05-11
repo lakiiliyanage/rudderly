@@ -124,3 +124,17 @@ Stack: Next.js 16.2.4, React 19, TypeScript, Tailwind CSS v4, @supabase/ssr 0.10
 - Tailwind v4: no tailwind.config.js, CSS-based config only
 - Supabase keys: Publishable key = NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
+
+## Test Cases — Always Embed Inside the Prompt
+
+Every prompt that asks Claude Code to build something must end with verification steps **inside the prompt itself**. Claude Code only sees what's in the prompt — test cases written outside the quoted block are invisible to it.
+
+**Always end building prompts with:**
+```
+After building, verify by testing:
+- Happy path: [exact steps] → [expected result]
+- Failure path: [exact steps] → [expected result]
+Do not mark complete until both pass.
+```
+
+This ensures Claude Code tests its own work before handing back, treats failure paths as requirements (not afterthoughts), and fixes any issues immediately rather than returning broken code.

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 
 const PERSONALITY_BADGE: Record<string, string> = {
   Professional: 'bg-blue-500/15 text-blue-400 border-blue-500/25',
@@ -78,12 +79,14 @@ export default function AgentCard({
             Edit
           </Link>
 
-          <button
+          <Button
+            variant="destructive"
+            size="sm"
             onClick={handleDelete}
-            className="text-xs font-medium text-red-400 hover:text-red-300 bg-red-950/40 hover:bg-red-950/60 px-2.5 py-1.5 rounded-lg transition-all"
+            className="text-xs border border-red-900/60 bg-red-950/40 text-red-400 hover:bg-red-950/60 hover:text-red-300"
           >
             Delete
-          </button>
+          </Button>
         </div>
       </div>
 

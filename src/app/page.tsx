@@ -1,9 +1,11 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import HashRedirect from "./HashRedirect"
 
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-gray-950 text-white">
+      <HashRedirect />
 
 
       {/* ── Hero ── */}

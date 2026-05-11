@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Button } from "@/components/ui/button"
 
 interface Task {
   id: number
@@ -146,12 +147,12 @@ export default function TodoPage() {
             {/* active:scale-95 — slightly shrinks when clicked (tactile feedback) */}
             {/* transition-all  — animates colour AND scale */}
             {/* font-semibold   — slightly less than bold, cleaner on buttons */}
-            <button
+            <Button
               onClick={addTask}
-              className="bg-violet-600 hover:bg-violet-500 active:scale-95 text-white font-semibold px-5 py-3 rounded-xl transition-all"
+              className="bg-violet-600 hover:bg-violet-500 active:scale-95 font-semibold px-5 py-3"
             >
               Add
-            </button>
+            </Button>
           </div>
 
           {/* ── Duplicate warning ── */}
@@ -164,18 +165,19 @@ export default function TodoPage() {
                 &ldquo;{input.trim()}&rdquo; already exists. Add it anyway?
               </p>
               <div className="flex gap-2 flex-shrink-0">
-                <button
+                <Button
                   onClick={commitTask}
-                  className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                  className="h-auto bg-yellow-600 hover:bg-yellow-500 px-3 py-1.5 text-xs font-medium"
                 >
                   Add anyway
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={() => setDuplicateWarning(false)}
-                  className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                  className="h-auto border-gray-600 bg-gray-700 text-white hover:bg-gray-600 hover:text-white px-3 py-1.5 text-xs font-medium"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -261,15 +263,16 @@ export default function TodoPage() {
             // text-sm       — smaller, secondary action shouldn't compete with "Add"
             // text-gray-500 hover:text-red-400 — muted default, red on hover (destructive action signal)
             // py-2          — comfortable click target without being bulky
-            <button
+            <Button
+              variant="destructive"
               onClick={clearCompleted}
-              className="mt-4 w-full flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 hover:text-red-300 text-sm font-medium px-4 py-2.5 rounded-xl transition-all active:scale-95"
+              className="mt-4 w-full gap-2 border border-red-500/20 bg-red-500/10 text-red-400 hover:border-red-500/40 hover:bg-red-500/20 hover:text-red-300 active:scale-95"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
               Clear {completedCount} completed {completedCount === 1 ? "task" : "tasks"}
-            </button>
+            </Button>
           )}
         </div>
 

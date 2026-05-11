@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
+import { Button } from '@/components/ui/button'
 
 type Message = {
   role: 'user' | 'assistant'
@@ -131,13 +132,14 @@ export default function ChatPanel({
         <div className="w-2 h-2 rounded-full bg-violet-500" />
         <span className="text-sm font-medium text-white">Chat with {agentName}</span>
         {messages.length > 0 && (
-          <button
+          <Button
+            variant="ghost"
             onClick={handleNewConversation}
             disabled={loading}
-            className="ml-auto text-xs text-gray-500 hover:text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="ml-auto h-auto p-0 text-xs text-gray-500 hover:bg-transparent hover:text-gray-300"
           >
             New conversation
-          </button>
+          </Button>
         )}
       </div>
 
@@ -224,26 +226,27 @@ export default function ChatPanel({
             className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50"
           />
           {loading ? (
-            <button
+            <Button
+              variant="outline"
               onClick={handleStop}
-              className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm font-medium text-white transition-all active:scale-95 shrink-0 flex items-center gap-2 min-w-[90px] justify-center"
+              className="gap-2 border-gray-600 bg-gray-700 text-white hover:bg-gray-600 hover:text-white min-w-[90px] shrink-0 active:scale-95"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                 <rect x="5" y="5" width="14" height="14" rx="2" />
               </svg>
               Stop
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               onClick={handleSend}
               disabled={!input.trim()}
-              className="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm font-medium text-white transition-all active:scale-95 shrink-0 flex items-center gap-2 min-w-[90px] justify-center"
+              className="gap-2 bg-violet-600 hover:bg-violet-500 min-w-[90px] shrink-0 active:scale-95"
             >
               Send
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.269 20.876L5.999 12zm0 0h7.5" />
               </svg>
-            </button>
+            </Button>
           )}
         </div>
         {/*

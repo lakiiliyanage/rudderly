@@ -1,11 +1,18 @@
 'use client'
 
-import { useActionState, useEffect } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { login } from '../actions'
+import { Button } from '@/components/ui/button'
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState(login, undefined)
+  const [linkExpired, setLinkExpired] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setLinkExpired(params.get('error') === 'link-expired')
+  }, [])
 
   useEffect(() => {
     if (state && 'success' in state) {
@@ -36,6 +43,16 @@ export default function LoginPage() {
             <p className="text-gray-400 text-sm mt-1">Sign in to your account</p>
           </div>
 
+          {/* Link-expired banner */}
+          {linkExpired && (
+            <div className="mb-6 flex items-start gap-2.5 bg-amber-950/60 border border-amber-800/60 text-amber-300 text-sm rounded-lg px-3.5 py-3">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+              <span>This link has expired or already been used. Please request a new one.</span>
+            </div>
+          )}
+
           {/* noValidate disables the browser's native validation popup so our
               styled error box is the only feedback the user sees. */}
           <form action={action} noValidate className="space-y-5">
@@ -56,9 +73,17 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300">
-                Password
-              </label>
+              <div className="flex items-baseline justify-between">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-300">
+                  Password
+                </label>
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
               <input
                 id="password"
                 name="password"
@@ -81,10 +106,10 @@ export default function LoginPage() {
             )}
 
             {/* Submit button */}
-            <button
+            <Button
               type="submit"
               disabled={pending}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-violet-600 hover:bg-violet-500 active:scale-[0.98] text-white font-medium text-sm rounded-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
+              className="w-full gap-2 bg-violet-600 hover:bg-violet-500 active:scale-[0.98]"
             >
               {pending && (
                 <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
@@ -93,7 +118,7 @@ export default function LoginPage() {
                 </svg>
               )}
               {pending ? 'Signing in…' : 'Sign in'}
-            </button>
+            </Button>
 
           </form>
         </div>
