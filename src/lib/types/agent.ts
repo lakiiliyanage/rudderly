@@ -33,6 +33,10 @@ export interface AgentConfig {
     email:      boolean
     calendar:   boolean
     calculator: boolean
+    documents: {
+      enabled: boolean
+      files: Array<{ id: string; name: string }>
+    }
   }
 
   limits: {

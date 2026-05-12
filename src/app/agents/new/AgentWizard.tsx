@@ -76,8 +76,10 @@ const AGENT_TYPES: {
   },
 ]
 
+// 'documents' is excluded here because it is not a simple boolean toggle —
+// it carries its own file list and gets its own UI step.
 const CAPABILITIES: {
-  key: keyof AgentConfig['capabilities']
+  key: Exclude<keyof AgentConfig['capabilities'], 'documents'>
   label: string
   description: string
 }[] = [
@@ -90,7 +92,7 @@ const CAPABILITIES: {
 const defaultConfig: AgentConfig = {
   type: 'custom',
   personality: { tone: 50, verbosity: 50, examplePhrases: [] },
-  capabilities: { webSearch: false, email: false, calendar: false, calculator: false },
+  capabilities: { webSearch: false, email: false, calendar: false, calculator: false, documents: { enabled: false, files: [] } },
   limits: { maxMessageLength: 1000, avoidTopics: [] },
 }
 
@@ -676,10 +678,71 @@ interface CapabilitiesStepProps {
 }
 
 function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
-  const enabledCount = CAPABILITIES.filter(({ key }) => capabilities[key]).length
+  const [driveUrl, setDriveUrl] = useState('')
+  const [urlError, setUrlError] = useState('')
+  const [adding, setAdding]     = useState(false)
 
-  function toggle(key: keyof AgentConfig['capabilities'], checked: boolean) {
+  const enabledCount =
+    CAPABILITIES.filter(({ key }) => capabilities[key]).length +
+    (capabilities.documents.enabled ? 1 : 0)
+
+  function toggle(key: Exclude<keyof AgentConfig['capabilities'], 'documents'>, checked: boolean) {
     onChange({ ...capabilities, [key]: checked })
+  }
+
+  function toggleDocuments(checked: boolean) {
+    onChange({ ...capabilities, documents: { ...capabilities.documents, enabled: checked } })
+  }
+
+  function removeFile(id: string) {
+    onChange({
+      ...capabilities,
+      documents: {
+        ...capabilities.documents,
+        files: capabilities.documents.files.filter(f => f.id !== id),
+      },
+    })
+  }
+
+  async function addDocument() {
+    setUrlError('')
+    const match = driveUrl.match(/\/d\/([a-zA-Z0-9_-]+)/)
+    if (!match) {
+      setUrlError('Please paste a valid Google Drive document URL.')
+      return
+    }
+    const fileId = match[1]
+    if (capabilities.documents.files.some(f => f.id === fileId)) {
+      setUrlError('This document has already been added.')
+      return
+    }
+    setAdding(true)
+    try {
+      const res = await fetch(`/api/drive/metadata?fileId=${fileId}`)
+      if (res.status === 403) {
+        setUrlError("This document isn't publicly accessible. Share it with 'Anyone with the link' in Google Drive and try again.")
+        return
+      }
+      if (res.status === 404) {
+        setUrlError("Document not found — check the URL or make sure the file hasn't been deleted.")
+        return
+      }
+      if (!res.ok) {
+        setUrlError('Could not fetch document details. Please try again.')
+        return
+      }
+      const { id, name } = await res.json() as { id: string; name: string }
+      onChange({
+        ...capabilities,
+        documents: {
+          ...capabilities.documents,
+          files: [...capabilities.documents.files, { id, name }],
+        },
+      })
+      setDriveUrl('')
+    } finally {
+      setAdding(false)
+    }
   }
 
   return (
@@ -687,7 +750,7 @@ function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
       {/* Summary badge */}
       <div className="mb-5">
         <Badge variant={enabledCount > 0 ? 'default' : 'secondary'}>
-          {enabledCount} of {CAPABILITIES.length} capabilities enabled
+          {enabledCount} of {CAPABILITIES.length + 1} capabilities enabled
         </Badge>
       </div>
 
@@ -706,6 +769,77 @@ function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
             />
           </div>
         ))}
+
+        {/* Documents row */}
+        <div className="py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-white">Documents</p>
+              <p className="text-xs text-gray-400 mt-0.5">Query files from Google Drive.</p>
+            </div>
+            <Switch
+              checked={capabilities.documents.enabled}
+              onCheckedChange={toggleDocuments}
+              aria-label="Documents"
+            />
+          </div>
+
+          {capabilities.documents.enabled && (
+            <div className="mt-4 space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="Paste a Google Drive document URL"
+                  value={driveUrl}
+                  onChange={e => { setDriveUrl(e.target.value); setUrlError('') }}
+                  className="flex-1 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={adding || driveUrl.trim() === ''}
+                  onClick={addDocument}
+                  className="shrink-0"
+                >
+                  {adding ? (
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : 'Add'}
+                </Button>
+              </div>
+
+              {urlError && (
+                <p className="text-xs text-red-400">{urlError}</p>
+              )}
+
+              {capabilities.documents.files.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {capabilities.documents.files.map(file => (
+                    <Badge key={file.id} variant="secondary" className="gap-1.5 max-w-[220px]">
+                      <span className="truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(file.id)}
+                        className="shrink-0 rounded-sm opacity-60 hover:opacity-100"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500">
+                Documents must be shared with &quot;Anyone with the link&quot; in Google Drive.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="mt-5 text-xs text-gray-500">
@@ -1105,7 +1239,10 @@ interface AgentPreviewPanelProps {
 function AgentPreviewPanel({ agentConfig, agentName, typeSelected }: AgentPreviewPanelProps) {
   const displayName        = agentName.trim() || 'Unnamed agent'
   const selectedType       = typeSelected ? AGENT_TYPES.find(t => t.value === agentConfig.type) : null
-  const enabledCapabilities = CAPABILITIES.filter(({ key }) => agentConfig.capabilities[key])
+  const enabledCapabilities = [
+    ...CAPABILITIES.filter(({ key }) => agentConfig.capabilities[key]),
+    ...(agentConfig.capabilities.documents.enabled ? [{ key: 'documents' as const, label: 'Documents' }] : []),
+  ]
 
   return (
     <aside className="hidden md:block w-64 shrink-0">

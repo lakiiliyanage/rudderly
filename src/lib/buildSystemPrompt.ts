@@ -32,9 +32,15 @@ export function buildSystemPrompt(
     email:      'email',
     calendar:   'calendar',
     calculator: 'calculator',
+    documents:  'documents',
   }
+  // Boolean capabilities are enabled when truthy; the documents capability is
+  // an object, so we check its .enabled flag explicitly.
   const active = (Object.keys(capabilities) as (keyof typeof capabilities)[])
-    .filter(k => capabilities[k])
+    .filter(k => {
+      const v = capabilities[k]
+      return typeof v === 'boolean' ? v : v.enabled
+    })
     .map(k => capabilityLabels[k])
   if (active.length > 0) {
     parts.push(`You have access to: ${active.join(', ')}.`)

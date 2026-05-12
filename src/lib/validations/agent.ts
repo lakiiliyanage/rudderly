@@ -12,6 +12,10 @@ const agentConfigSchema = z.object({
     email:      z.boolean(),
     calendar:   z.boolean(),
     calculator: z.boolean(),
+    documents:  z.object({
+      enabled: z.boolean(),
+      files:   z.array(z.object({ id: z.string(), name: z.string() })),
+    }),
   }),
   limits: z.object({
     maxMessageLength: z.number().min(50).max(10_000),

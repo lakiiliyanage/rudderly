@@ -437,10 +437,10 @@ All of the following must pass before committing. These pull together the tests 
 | Click × on an added document Badge | File disappears from list and from `agentConfig.capabilities.documents.files` |
 | `GET /api/drive/metadata?fileId=[valid public Google Doc ID]` (logged in) | Returns `{ id: '...', name: 'Your Document Title' }` |
 | `GET /api/drive/metadata?fileId=[valid public Google Doc ID]` (not logged in) | Returns 401 |
-| Agent with all toggles OFF, send any message | Claude replies directly — no tool calls, no thinking indicator |
-| Agent with calculator ON, ask `'what is 847 × 23?'` | `'Calculating...'` indicator → correct answer `19,481` in reply |
-| Agent with web search ON, ask `'what is the news today?'` | `'Searching the web...'` indicator → real web results in reply |
-| Agent with a Google Doc configured, ask a question the document answers | `'Reading document...'` indicator → Claude references actual document content |
+| Agent with all toggles OFF, send any message | Claude replies directly — no tool calls |
+| Agent with calculator ON, ask `'what is 847 × 23?'` | Claude returns the correct answer `19,481` (no thinking indicator yet — that's Step 8) |
+| Agent with web search ON, ask `'what is the news today?'` | Claude returns real web results in its reply (no indicator yet — that's Step 8) |
+| Agent with a Google Doc configured, ask a question the document answers | Claude references the actual document content in its reply (no indicator yet — that's Step 8) |
 | Agent with documents ON but no files configured — send `'use document_reader with fileId=random-id'` | Access denied message → Claude replies gracefully, no crash |
 
 Do not commit until all eleven pass.
@@ -460,12 +460,22 @@ git commit -m "feat: documents capability — Google Drive reader tool, builder 
 
 ## ⚙️ Session 3 — Sunday 10am–12pm (Hours 5–6): Thinking Indicator + Research Assistant Test
 
-### Step 8 — Add a Multi-State Thinking Indicator to the Chat UI
+### Step 8 — Fix Markdown Rendering + Add Multi-State Thinking Indicator
 
-Right now your chat UI shows nothing while waiting for Claude to reply. With tool use, responses can take 3–5 seconds — especially when a web search or document read is running. Silence during that time feels like the app has crashed.
+> 🐛 **Known bug to fix in this step:** During testing of Steps 5–7 you may have noticed that Claude's replies show raw markdown — asterisks around bold text (`**19,481**`) instead of rendered formatting. This is because the chat bubbles are displaying Claude's response as plain text rather than parsing the markdown. Fix this in the same step as the thinking indicator since both touch the same chat UI component.
+
+This step fixes two things at once: the markdown rendering bug, and the thinking indicator (the feedback the user sees while Claude is working).
 
 Ask Claude Code:
-> *"Add a multi-state thinking indicator to the chat UI at `src/app/agents/[id]/page.tsx` (or wherever the chat interface lives). The indicator should show different messages based on the streaming event type received:*
+> *"In the chat UI at `src/app/agents/[id]/page.tsx` (or wherever assistant messages are rendered), fix two issues:*
+>
+> ***Issue 1 — Markdown not rendering in chat bubbles.** Claude's replies contain markdown formatting (e.g. `**bold**`, `# headings`, `- lists`) but they're displaying as raw text with the asterisks visible. Fix this by installing and using `react-markdown` (`npm install react-markdown`) to render assistant message content instead of displaying it as a plain string. `react-markdown` is a React component that parses markdown syntax and converts it to proper HTML elements — bold text, headings, lists, code blocks, and so on. Apply it only to assistant messages — user messages should still display as plain text since users don't write markdown.*
+>
+> *After fixing markdown rendering, verify:*
+> *- Send a message that produces bold text (e.g. ask 'what is 847 × 23?' with calculator ON) → the answer should show as formatted bold, not `**19,481**`*
+> *- User messages still display as plain text — no markdown parsing applied to them*
+>
+> ***Issue 2 — No feedback while the agent is working.** Add a multi-state thinking indicator that shows different messages based on the streaming event type received:*
 >
 > *- Waiting for first response: show `'Thinking...'` with a pulsing dots animation (three dots that fade in and out in sequence — this is called a typing indicator, it signals to users that text output is coming soon). Implement by applying Tailwind's `animate-pulse` class to each dot with a different `animation-delay` value: 0ms, 150ms, 300ms — this staggers the pulse so they animate one after another, not all at once.*
 > *- `tool_call` event with `tool: 'web_search'`: switch to `'Searching the web...'`*
@@ -476,11 +486,12 @@ Ask Claude Code:
 >
 > *Use a `thinkingState` state variable typed as: `'idle' | 'thinking' | 'searching' | 'calculating' | 'checking_time' | 'reading_document'`. The Send button must be disabled (greyed out and unclickable, `disabled={thinkingState !== 'idle'}`) while the agent is working — this prevents the user from sending a second message before the first response is complete.*
 >
-> *After building, verify by testing:*
-> *- Happy path: send a message → 'Thinking...' appears → if a tool runs, the label updates to the specific label → text starts streaming → indicator disappears*
+> *After building both fixes, verify by testing:*
+> *- Markdown fix: ask 'what is 847 × 23?' with calculator ON → answer renders as bold formatted text, not raw asterisks*
+> *- Happy path (indicator): send a message → 'Thinking...' appears → if a tool runs, the label updates to the specific label → text starts streaming → indicator disappears*
 > *- Failure path (send button): send a message and immediately click Send again → button is disabled until full response is complete*
 > *- Document read: ask a question answered by a configured document → 'Reading document...' appears while the document is fetched*
-> *Do not mark complete until all three pass."*
+> *Do not mark complete until all four pass."*
 
 ---
 
@@ -587,6 +598,8 @@ All of the following must pass before committing. These pull together the tests 
 
 | Test | Expected result |
 |---|---|
+| Ask 'what is 847 × 23?' with calculator ON | Answer renders as bold formatted text — not raw `**19,481**` with asterisks |
+| Send a user message with asterisks e.g. `**test**` | Displays as plain text — user messages are not markdown-parsed |
 | Send a message → watch the indicator | `'Thinking...'` appears, then tool-specific label if a tool runs, then disappears when text streams |
 | Send a message and immediately click Send again | Send button is disabled — cannot double-send while waiting |
 | Ask a document question | `'Reading document...'` label appears while document is fetched |
@@ -719,6 +732,8 @@ Work through these top to bottom. Don't mark anything done until you've actually
 - [ ] `allowedFileIds` passed to `dispatchToolCall` — document security boundary enforced
 - [ ] Chat route streams `tool_call` events before running each tool
 - [ ] Chat route has graceful fallback when a tool errors — never returns 500 to client
+- [ ] `react-markdown` installed and applied to assistant messages — Claude's bold, headings, lists, and code blocks render correctly
+- [ ] User messages still display as plain text — markdown not applied to them
 - [ ] Thinking indicator shows 'Thinking...' → tool-specific labels (including 'Reading document...') → disappears on response
 - [ ] Send button disabled while agent is thinking or tool is running
 - [ ] Research Assistant agent created with web search + documents, both tested end-to-end
@@ -749,6 +764,7 @@ Run these specific tests before closing out the week. Each one should produce th
 | Paste a valid public Google Doc URL in the builder | Document name appears as a Badge — file added to config |
 | Invalid Brave API key, ask a search question | Claude falls back gracefully — no 500 error, no crash |
 | Builder Step 5 test dialog, documents configured, ask about document | Claude reads the document and references it in the preview |
+| Ask 'what is 847 × 23?' with calculator ON | Answer renders as bold formatted text — not raw `**19,481**` with asterisks visible |
 | Send a message and immediately click Send again | Send is disabled — cannot send while waiting |
 | Agent with web search + 2 documents in header | '🔍 Web search' + '📄 Documents (2)' badges visible |
 | Agent with no capabilities | '💬 Chat only' badge visible |

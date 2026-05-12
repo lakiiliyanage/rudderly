@@ -8,6 +8,14 @@ type Message = {
   content: string
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  web_search:      'Searching the web...',
+  calculator:      'Calculating...',
+  get_datetime:    'Checking the time...',
+  document_reader: 'Reading document...',
+  word_counter:    'Counting words...',
+}
+
 export default function ChatPanel({
   agentId,
   agentName,
@@ -15,13 +23,14 @@ export default function ChatPanel({
   agentId: string
   agentName: string
 }) {
-  const [messages,     setMessages]     = useState<Message[]>([])
-  const [input,        setInput]        = useState('')
-  const [loading,      setLoading]      = useState(false)
-  const [error,        setError]        = useState<string | null>(null)
-  const [interrupted,  setInterrupted]  = useState(false)
-  const bottomRef                       = useRef<HTMLDivElement>(null)
-  const abortRef                        = useRef<AbortController | null>(null)
+  const [messages,      setMessages]      = useState<Message[]>([])
+  const [input,         setInput]         = useState('')
+  const [loading,       setLoading]       = useState(false)
+  const [error,         setError]         = useState<string | null>(null)
+  const [interrupted,   setInterrupted]   = useState(false)
+  const [thinkingLabel, setThinkingLabel] = useState<string | null>(null)
+  const bottomRef                         = useRef<HTMLDivElement>(null)
+  const abortRef                          = useRef<AbortController | null>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -39,6 +48,7 @@ export default function ChatPanel({
     setLoading(true)
     setError(null)
     setInterrupted(false)
+    setThinkingLabel(null)
 
     const controller  = new AbortController()
     abortRef.current  = controller
@@ -74,15 +84,38 @@ export default function ChatPanel({
       const reader  = res.body!.getReader()
       const decoder = new TextDecoder()
 
+      // Buffer incomplete SSE lines across chunk boundaries.
+      // The route emits: data: {"type":"text","text":"…"}\n\n
+      //                  data: {"type":"tool_call","tool":"…"}\n\n
+      let sseBuffer = ''
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
         // { stream: true } keeps the decoder's internal buffer across calls
         // so multi-byte characters split across chunk boundaries decode correctly.
-        fullContent += decoder.decode(value, { stream: true })
+        sseBuffer += decoder.decode(value, { stream: true })
 
-        setMessages([...nextMessages, { role: 'assistant', content: fullContent }])
+        // Split on double-newline (SSE event boundary). The final element is
+        // an incomplete event — keep it in the buffer for the next chunk.
+        const parts = sseBuffer.split('\n\n')
+        sseBuffer = parts.pop() ?? ''
+
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(part.slice(6)) as { type: string; text?: string; tool?: string }
+            if (event.type === 'text' && event.text) {
+              fullContent += event.text
+              setMessages([...nextMessages, { role: 'assistant', content: fullContent }])
+            } else if (event.type === 'tool_call' && event.tool) {
+              setThinkingLabel(TOOL_LABELS[event.tool] ?? 'Thinking...')
+            }
+          } catch {
+            // Malformed SSE event — ignore and continue.
+          }
+        }
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -196,12 +229,16 @@ export default function ChatPanel({
           </div>
         )}
 
-        {/* Typing indicator — only while loading AND before the first chunk
-            arrives. Once setMessages adds the assistant bubble, this hides. */}
+        {/* Thinking indicator — shown while loading, before the first text chunk
+            arrives. Shows plain dots for direct replies; shows a tool label
+            (e.g. "Calculating...") while a tool is executing between calls. */}
         {loading && messages.at(-1)?.role !== 'assistant' && (
           <div className="flex justify-start">
             <div className="bg-gray-800 rounded-2xl rounded-bl-sm px-4 py-3.5">
               <div className="flex gap-1.5 items-center">
+                {thinkingLabel && (
+                  <span className="text-xs text-gray-400 mr-0.5">{thinkingLabel}</span>
+                )}
                 <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:0ms]"   />
                 <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:150ms]" />
                 <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:300ms]" />

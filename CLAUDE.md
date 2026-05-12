@@ -74,10 +74,7 @@ const supabase = createServerClient(URL, KEY, { cookies: { ... } })
 /* Custom tokens go here via @theme, not tailwind.config.js */
 ```
 
-**Supabase API keys (2025 UI):**
-- Publishable key (`sb_publishable_...`) = browser-safe, used as `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- Secret key (`sb_secret_...`) = server only, never `NEXT_PUBLIC_`
-- Project URL = found at Settings → Data API (not Settings → General)
+**Supabase keys:** Publishable (`sb_publishable_...`) = `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Secret (`sb_secret_...`) = server only. Project URL = Settings → Data API.
 
 ## Environment Variables
 ```
@@ -99,12 +96,6 @@ Use **OpenSpec** (`@fission-ai/openspec`) for any task that spans multiple files
 **When to use:** new pages, major refactors, new Supabase tables, multi-step features.
 **When to skip:** typo fixes, style tweaks, adding a single field, answering questions.
 
-If OpenSpec is not yet initialised in the project:
-```bash
-npm install -g @fission-ai/openspec@latest
-openspec init --tools claude
-```
-
 Core workflow:
 1. `/opsx:propose <feature-name>` — agree on spec and tasks before any code
 2. `/opsx:apply` — implement tasks from the approved spec
@@ -114,17 +105,7 @@ Core workflow:
 
 ## Claude Code Prompt Template
 
-When asking Claude Code to build anything, always include version context:
-
-```
-I'm building AgentForge — a visual AI agent builder for non-developers.
-Stack: Next.js 16.2.4, React 19, TypeScript, Tailwind CSS v4, @supabase/ssr 0.10.2.
-- Use proxy.ts (not middleware.ts) for session handling
-- Use Server Actions ('use server') for form submissions
-- Await cookies() from next/headers
-- Tailwind v4: no tailwind.config.js, CSS-based config only
-- Supabase keys: Publishable key = NEXT_PUBLIC_SUPABASE_ANON_KEY
-```
+Always include this context when prompting: Next.js 16.2.4 / React 19 / Tailwind v4 / @supabase/ssr 0.10.2 — proxy.ts not middleware.ts, await cookies(), no tailwind.config.js, Publishable key = NEXT_PUBLIC_SUPABASE_ANON_KEY.
 
 ## Test Cases — Always Embed Inside the Prompt
 
@@ -138,4 +119,15 @@ After building, verify by testing:
 Do not mark complete until both pass.
 ```
 
-This ensures Claude Code tests its own work before handing back, treats failure paths as requirements (not afterthoughts), and fixes any issues immediately rather than returning broken code.
+## Testing Strategy — Match the Test to the Tool
+
+| What to verify | How |
+|---|---|
+| Tool logic / dispatch | `set -a && source .env.local && set +a && npx tsx src/lib/tools/test-runner.ts` |
+| Route auth / 401 / 403 / 400 | `curl` — no session needed |
+| TypeScript | `npx tsc --noEmit` — after every change |
+| UX / streaming / auth flows | Browser only — cannot be automated from CLI |
+
+**Never** start a dev server and poll logs waiting for browser interaction to verify logic testable by tsx. Use `test-runner.ts` for all tool diagnostics — one command, 2 seconds.
+
+When adding or changing a tool runner, add a matching test case to `src/lib/tools/test-runner.ts` at the same time.
