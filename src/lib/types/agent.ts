@@ -29,10 +29,11 @@ export interface AgentConfig {
   }
 
   capabilities: {
-    webSearch:  boolean
-    email:      boolean
-    calendar:   boolean
-    calculator: boolean
+    webSearch:   boolean
+    email:       boolean
+    calendar:    boolean
+    calculator:  boolean
+    wordCounter: boolean
     documents: {
       enabled: boolean
       files: Array<{ id: string; name: string }>

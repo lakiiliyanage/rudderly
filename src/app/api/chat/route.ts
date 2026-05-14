@@ -7,9 +7,11 @@ import {
   dateTimeTool,
   webSearchTool,
   calculatorTool,
+  wordCounterTool,
   documentReaderTool,
 } from '@/lib/tools/definitions'
 import { dispatchToolCall } from '@/lib/tools/runner'
+import type { ToolLogCore } from '@/lib/tools/runner'
 import type { AgentConfig } from '@/lib/types/agent'
 
 const methodNotAllowed = () =>
@@ -77,8 +79,9 @@ export async function POST(request: Request) {
     // dateTimeTool is always included — knowing the current date is a basic
     // orientation capability every agent should have, regardless of toggles.
     const tools: Anthropic.Tool[] = [dateTimeTool]
-    if (capabilities.webSearch)  tools.push(webSearchTool)
-    if (capabilities.calculator) tools.push(calculatorTool)
+    if (capabilities.webSearch)   tools.push(webSearchTool)
+    if (capabilities.calculator)  tools.push(calculatorTool)
+    if (capabilities.wordCounter) tools.push(wordCounterTool)
     if (documents.enabled && documents.files.length > 0) tools.push(documentReaderTool)
 
     // Security boundary: only these IDs may be passed to document_reader.
@@ -99,6 +102,19 @@ export async function POST(request: Request) {
         'always use the document_reader tool first to read the relevant document before answering. ' +
         'Ground your response in the actual document content.'
     }
+
+    // ── Tool logger ───────────────────────────────────────────────────────
+    // Fire-and-forget: the void promise is intentionally not awaited.
+    // If the insert fails, we log to console but never surface it to the user.
+    function makeLogger(userId: string, agentId: string) {
+      return (core: ToolLogCore) => {
+        void supabase
+          .from('tool_logs')
+          .insert({ ...core, user_id: userId, agent_id: agentId })
+          .then(({ error }) => { if (error) console.error('[tool_logs]', error) }, err => console.error('[tool_logs]', err))
+      }
+    }
+    const logger = makeLogger(user.id, agent.id)
 
     // ── Streaming response ─────────────────────────────────────────────────
     // Protocol: every chunk is a Server-Sent Events line —
@@ -178,7 +194,7 @@ export async function POST(request: Request) {
                 result = await dispatchToolCall(
                   block.name,
                   block.input as Record<string, unknown>,
-                  { allowedFileIds }
+                  { allowedFileIds, logger }
                 )
               } catch (err) {
                 result =

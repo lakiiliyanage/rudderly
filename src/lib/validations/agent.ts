@@ -8,10 +8,11 @@ const agentConfigSchema = z.object({
     examplePhrases: z.array(z.string()),
   }),
   capabilities: z.object({
-    webSearch:  z.boolean(),
-    email:      z.boolean(),
-    calendar:   z.boolean(),
-    calculator: z.boolean(),
+    webSearch:   z.boolean(),
+    email:       z.boolean(),
+    calendar:    z.boolean(),
+    calculator:  z.boolean(),
+    wordCounter: z.boolean(),
     documents:  z.object({
       enabled: z.boolean(),
       files:   z.array(z.object({ id: z.string(), name: z.string() })),

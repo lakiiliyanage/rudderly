@@ -19,6 +19,7 @@ type Message = {
 // 'calculating'      → calculator tool running
 // 'checking_time'    → get_datetime tool running
 // 'reading_document' → document_reader tool running
+// 'counting_words'   → word_counter tool running
 type ThinkingState =
   | 'idle'
   | 'thinking'
@@ -26,6 +27,7 @@ type ThinkingState =
   | 'calculating'
   | 'checking_time'
   | 'reading_document'
+  | 'counting_words'
 
 // Maps the tool name from the SSE event to the ThinkingState value.
 const TOOL_TO_STATE: Record<string, ThinkingState> = {
@@ -33,6 +35,7 @@ const TOOL_TO_STATE: Record<string, ThinkingState> = {
   calculator:      'calculating',
   get_datetime:    'checking_time',
   document_reader: 'reading_document',
+  word_counter:    'counting_words',
 }
 
 // Human-readable label shown in the thinking indicator bubble.
@@ -42,6 +45,7 @@ const STATE_LABELS: Record<Exclude<ThinkingState, 'idle'>, string> = {
   calculating:      'Calculating...',
   checking_time:    'Checking the time...',
   reading_document: 'Reading document...',
+  counting_words:   'Counting words...',
 }
 
 // ── Markdown components ───────────────────────────────────────────────────────

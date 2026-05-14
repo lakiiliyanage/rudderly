@@ -28,11 +28,12 @@ export function buildSystemPrompt(
   }
 
   const capabilityLabels: Record<keyof AgentConfig['capabilities'], string> = {
-    webSearch:  'web search',
-    email:      'email',
-    calendar:   'calendar',
-    calculator: 'calculator',
-    documents:  'documents',
+    webSearch:   'web search',
+    email:       'email',
+    calendar:    'calendar',
+    calculator:  'calculator',
+    wordCounter: 'word counter',
+    documents:   'documents',
   }
   // Boolean capabilities are enabled when truthy; the documents capability is
   // an object, so we check its .enabled flag explicitly.

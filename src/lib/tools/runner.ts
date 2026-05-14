@@ -130,31 +130,74 @@ export async function runWordCounter(text: string): Promise<string> {
 
 // ─── Dispatcher ──────────────────────────────────────────────────────────────
 
+// The logger receives the tool-specific fields; the caller appends user_id /
+// agent_id before inserting into Supabase.  Keeping those out of the runner
+// lets the runner stay free of Supabase imports.
+export type ToolLogCore = {
+  tool_name:     string
+  tool_input:    Record<string, unknown>
+  success:       boolean
+  error_message: string | null
+  duration_ms:   number
+}
+
+export interface DispatchContext {
+  allowedFileIds: string[]
+  /** Optional fire-and-forget logger — must never throw to caller. */
+  logger?: (core: ToolLogCore) => void
+}
+
 export async function dispatchToolCall(
   toolName: string,
   toolInput: Record<string, unknown>,
-  context: { allowedFileIds: string[] }
+  context: DispatchContext
 ): Promise<string> {
-  switch (toolName) {
-    case 'web_search':
-      return runWebSearch(toolInput.query as string)
+  const start        = Date.now()
+  let success        = true
+  let errorMessage: string | null = null
 
-    case 'calculator':
-      return runCalculator(toolInput.expression as string)
+  try {
+    switch (toolName) {
+      case 'web_search':
+        return runWebSearch(toolInput.query as string)
 
-    case 'get_datetime':
-      return runDateTime()
+      case 'calculator':
+        return runCalculator(toolInput.expression as string)
 
-    case 'document_reader':
-      return runDocumentReader(
-        toolInput.fileId as string,
-        context.allowedFileIds
-      )
+      case 'get_datetime':
+        return runDateTime()
 
-    case 'word_counter':
-      return runWordCounter(toolInput.text as string)
+      case 'document_reader':
+        return runDocumentReader(
+          toolInput.fileId as string,
+          context.allowedFileIds
+        )
 
-    default:
-      return 'Unknown tool.'
+      case 'word_counter':
+        return runWordCounter(toolInput.text as string)
+
+      default:
+        return 'Unknown tool.'
+    }
+  } catch (err) {
+    success      = false
+    errorMessage = err instanceof Error ? err.message : String(err)
+    throw err
+  } finally {
+    if (context.logger) {
+      try {
+        context.logger({
+          tool_name:     toolName,
+          // For document_reader toolInput is { fileId } — no document content.
+          // For other tools this logs the full input (query, expression, text).
+          tool_input:    toolInput,
+          success,
+          error_message: errorMessage,
+          duration_ms:   Date.now() - start,
+        })
+      } catch (logErr) {
+        console.error('[tool_logs] logger callback threw:', logErr)
+      }
+    }
   }
 }

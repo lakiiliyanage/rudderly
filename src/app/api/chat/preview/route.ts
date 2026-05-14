@@ -7,9 +7,11 @@ import {
   dateTimeTool,
   webSearchTool,
   calculatorTool,
+  wordCounterTool,
   documentReaderTool,
 } from '@/lib/tools/definitions'
 import { dispatchToolCall } from '@/lib/tools/runner'
+import type { ToolLogCore } from '@/lib/tools/runner'
 import type { AgentConfig } from '@/lib/types/agent'
 
 const methodNotAllowed = () =>
@@ -54,8 +56,9 @@ export async function POST(request: Request) {
     const documents = capabilities.documents ?? { enabled: false, files: [] as AgentConfig['capabilities']['documents']['files'] }
 
     const tools: Anthropic.Tool[] = [dateTimeTool]
-    if (capabilities.webSearch)  tools.push(webSearchTool)
-    if (capabilities.calculator) tools.push(calculatorTool)
+    if (capabilities.webSearch)   tools.push(webSearchTool)
+    if (capabilities.calculator)  tools.push(calculatorTool)
+    if (capabilities.wordCounter) tools.push(wordCounterTool)
     if (documents.enabled && documents.files.length > 0) tools.push(documentReaderTool)
 
     const allowedFileIds = documents.files.map(f => f.id)
@@ -91,6 +94,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ reply })
     }
 
+    // ── Tool logger (preview has no agent_id) ────────────────────────
+    const logger = (core: ToolLogCore) => {
+      void supabase
+        .from('tool_logs')
+        .insert({ ...core, user_id: user.id, agent_id: null })
+        .then(({ error }) => { if (error) console.error('[tool_logs]', error) }, err => console.error('[tool_logs]', err))
+    }
+
     // ── Tool execution ────────────────────────────────────────────────
     const toolUseBlocks = firstResponse.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
@@ -104,7 +115,7 @@ export async function POST(request: Request) {
         result = await dispatchToolCall(
           block.name,
           block.input as Record<string, unknown>,
-          { allowedFileIds }
+          { allowedFileIds, logger }
         )
       } catch (err) {
         result =

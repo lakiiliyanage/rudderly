@@ -98,7 +98,8 @@ export const wordCounterTool: Anthropic.Tool = {
 // calculator. The 'documents' key below anticipates the documents capability
 // that will be added in a future sprint.
 export const AGENT_TOOLS: Record<string, Anthropic.Tool> = {
-  webSearch:  webSearchTool,
-  calculator: calculatorTool,
-  documents:  documentReaderTool,
+  webSearch:   webSearchTool,
+  calculator:  calculatorTool,
+  wordCounter: wordCounterTool,
+  documents:   documentReaderTool,
 }

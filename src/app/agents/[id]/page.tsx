@@ -46,9 +46,10 @@ export default async function AgentPage({ params, searchParams }: AgentPageProps
   // Capability badge list — displayed in the agent header.
   const caps = config.capabilities
   const capBadges: { key: string; label: string }[] = []
-  if (caps?.webSearch)          capBadges.push({ key: 'webSearch',  label: '🔍 Web search' })
-  if (caps?.calculator)         capBadges.push({ key: 'calculator', label: '🧮 Calculator' })
-  if (caps?.documents?.enabled) capBadges.push({ key: 'documents',  label: `📄 Documents (${caps.documents.files.length})` })
+  if (caps?.webSearch)          capBadges.push({ key: 'webSearch',   label: '🔍 Web search' })
+  if (caps?.calculator)         capBadges.push({ key: 'calculator',  label: '🧮 Calculator' })
+  if (caps?.wordCounter)        capBadges.push({ key: 'wordCounter', label: '📝 Word counter' })
+  if (caps?.documents?.enabled) capBadges.push({ key: 'documents',   label: `📄 Documents (${caps.documents.files.length})` })
 
   const date = new Intl.DateTimeFormat('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',

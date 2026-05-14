@@ -83,16 +83,17 @@ const CAPABILITIES: {
   label: string
   description: string
 }[] = [
-  { key: 'webSearch',  label: 'Web Search',  description: 'Finds current information from the internet in real time.' },
-  { key: 'email',      label: 'Email',       description: 'Reads and sends emails on your behalf.' },
-  { key: 'calendar',   label: 'Calendar',    description: 'Views and creates calendar events.' },
-  { key: 'calculator', label: 'Calculator',  description: 'Performs precise numerical calculations.' },
+  { key: 'webSearch',   label: 'Web Search',    description: 'Finds current information from the internet in real time.' },
+  { key: 'email',       label: 'Email',         description: 'Reads and sends emails on your behalf.' },
+  { key: 'calendar',    label: 'Calendar',      description: 'Views and creates calendar events.' },
+  { key: 'calculator',  label: 'Calculator',    description: 'Performs precise numerical calculations.' },
+  { key: 'wordCounter', label: 'Word Counter',  description: 'Counts words, characters, and sentences in any text.' },
 ]
 
 const defaultConfig: AgentConfig = {
   type: 'custom',
   personality: { tone: 50, verbosity: 50, examplePhrases: [] },
-  capabilities: { webSearch: false, email: false, calendar: false, calculator: false, documents: { enabled: false, files: [] } },
+  capabilities: { webSearch: false, email: false, calendar: false, calculator: false, wordCounter: false, documents: { enabled: false, files: [] } },
   limits: { maxMessageLength: 1000, avoidTopics: [] },
 }
 
