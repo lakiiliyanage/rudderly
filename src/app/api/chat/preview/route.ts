@@ -3,6 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
+import {
+  dateTimeTool,
+  webSearchTool,
+  calculatorTool,
+  documentReaderTool,
+} from '@/lib/tools/definitions'
+import { dispatchToolCall } from '@/lib/tools/runner'
 import type { AgentConfig } from '@/lib/types/agent'
 
 const methodNotAllowed = () =>
@@ -42,18 +49,100 @@ export async function POST(request: Request) {
       )
     }
 
-    // ── Call Claude ───────────────────────────────────────────────────
-    const systemPrompt = buildSystemPrompt(agentName || 'Agent', '', agentConfig)
+    // ── Tools ─────────────────────────────────────────────────────────
+    const { capabilities } = agentConfig
+    const documents = capabilities.documents ?? { enabled: false, files: [] as AgentConfig['capabilities']['documents']['files'] }
 
-    const anthropic  = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
-    const response   = await anthropic.messages.create({
+    const tools: Anthropic.Tool[] = [dateTimeTool]
+    if (capabilities.webSearch)  tools.push(webSearchTool)
+    if (capabilities.calculator) tools.push(calculatorTool)
+    if (documents.enabled && documents.files.length > 0) tools.push(documentReaderTool)
+
+    const allowedFileIds = documents.files.map(f => f.id)
+
+    // ── System prompt ─────────────────────────────────────────────────
+    let systemPrompt = buildSystemPrompt(agentName || 'Agent', '', agentConfig)
+
+    if (documents.enabled && documents.files.length > 0) {
+      const fileList = documents.files
+        .map(f => `- "${f.name}" (ID: ${f.id})`)
+        .join('\n')
+      systemPrompt +=
+        '\n\nYou have access to the following documents via the document_reader tool:\n' +
+        fileList +
+        '\n\nWhen the user asks a question that could be answered by these documents, ' +
+        'always use the document_reader tool first to read the relevant document before answering. ' +
+        'Ground your response in the actual document content.'
+    }
+
+    // ── First Claude call ─────────────────────────────────────────────
+    const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+    const firstResponse = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system:     systemPrompt,
       messages,
+      ...(tools.length > 0 && { tools }),
     })
 
-    const reply = response.content[0].type === 'text' ? response.content[0].text : ''
+    // Pure text response — return immediately.
+    if (firstResponse.stop_reason !== 'tool_use') {
+      const reply = firstResponse.content[0].type === 'text' ? firstResponse.content[0].text : ''
+      return NextResponse.json({ reply })
+    }
+
+    // ── Tool execution ────────────────────────────────────────────────
+    const toolUseBlocks = firstResponse.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+    )
+
+    const toolResults: Anthropic.ToolResultBlockParam[] = []
+
+    for (const block of toolUseBlocks) {
+      let result: string
+      try {
+        result = await dispatchToolCall(
+          block.name,
+          block.input as Record<string, unknown>,
+          { allowedFileIds }
+        )
+      } catch (err) {
+        result =
+          `The ${block.name} tool encountered an error. ` +
+          'Please answer from your general knowledge instead.'
+        console.error(`[chat/preview] tool error (${block.name}):`, err)
+      }
+
+      toolResults.push({
+        type:        'tool_result',
+        tool_use_id: block.id,
+        content:     result!,
+      })
+    }
+
+    // ── Second Claude call ────────────────────────────────────────────
+    const secondMessages: Anthropic.MessageParam[] = [
+      ...messages,
+      {
+        role:    'assistant' as const,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        content: firstResponse.content as any,
+      },
+      {
+        role:    'user' as const,
+        content: toolResults,
+      },
+    ]
+
+    const secondResponse = await anthropic.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system:     systemPrompt,
+      messages:   secondMessages,
+      ...(tools.length > 0 && { tools }),
+    })
+
+    const reply = secondResponse.content[0].type === 'text' ? secondResponse.content[0].text : ''
     return NextResponse.json({ reply })
 
   } catch (error) {

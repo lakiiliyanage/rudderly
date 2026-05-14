@@ -1,19 +1,70 @@
 'use client'
 
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button'
+import { Badge }   from '@/components/ui/badge'
 
 type Message = {
-  role: 'user' | 'assistant'
-  content: string
+  role:          'user' | 'assistant'
+  content:       string
+  sources?:      string[]    // web_search: source URLs to show below the reply
+  documentUsed?: string      // document_reader: name of the doc that was read
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  web_search:      'Searching the web...',
-  calculator:      'Calculating...',
-  get_datetime:    'Checking the time...',
-  document_reader: 'Reading document...',
-  word_counter:    'Counting words...',
+// ── Thinking state machine ────────────────────────────────────────────────────
+// 'idle'             → no request in flight
+// 'thinking'         → request sent, waiting for first event
+// 'searching'        → web_search tool running
+// 'calculating'      → calculator tool running
+// 'checking_time'    → get_datetime tool running
+// 'reading_document' → document_reader tool running
+type ThinkingState =
+  | 'idle'
+  | 'thinking'
+  | 'searching'
+  | 'calculating'
+  | 'checking_time'
+  | 'reading_document'
+
+// Maps the tool name from the SSE event to the ThinkingState value.
+const TOOL_TO_STATE: Record<string, ThinkingState> = {
+  web_search:      'searching',
+  calculator:      'calculating',
+  get_datetime:    'checking_time',
+  document_reader: 'reading_document',
+}
+
+// Human-readable label shown in the thinking indicator bubble.
+const STATE_LABELS: Record<Exclude<ThinkingState, 'idle'>, string> = {
+  thinking:         'Thinking...',
+  searching:        'Searching the web...',
+  calculating:      'Calculating...',
+  checking_time:    'Checking the time...',
+  reading_document: 'Reading document...',
+}
+
+// ── Markdown components ───────────────────────────────────────────────────────
+// Applied only to assistant messages. Provides minimal Tailwind styling so that
+// markdown elements (bold, lists, code, headings) render correctly inside the
+// dark chat bubble rather than inheriting unstyled browser defaults.
+const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
+  p:          ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  strong:     ({ children }) => <strong className="font-semibold">{children}</strong>,
+  em:         ({ children }) => <em className="italic">{children}</em>,
+  h1:         ({ children }) => <h1 className="text-base font-bold mt-2 mb-1">{children}</h1>,
+  h2:         ({ children }) => <h2 className="text-sm font-bold mt-2 mb-1">{children}</h2>,
+  h3:         ({ children }) => <h3 className="text-sm font-semibold mt-1 mb-1">{children}</h3>,
+  ul:         ({ children }) => <ul className="list-disc list-outside pl-4 mb-2 space-y-0.5">{children}</ul>,
+  ol:         ({ children }) => <ol className="list-decimal list-outside pl-4 mb-2 space-y-0.5">{children}</ol>,
+  li:         ({ children }) => <li>{children}</li>,
+  blockquote: ({ children }) => <blockquote className="border-l-2 border-gray-600 pl-3 italic text-gray-400 my-1">{children}</blockquote>,
+  pre:        ({ children }) => <pre className="bg-gray-950/60 rounded-lg p-2.5 my-1.5 overflow-x-auto text-xs font-mono">{children}</pre>,
+  // className is present on block code (language-xxx), absent on inline code.
+  code: ({ className, children }) =>
+    className
+      ? <code className={className}>{children}</code>
+      : <code className="bg-gray-950/60 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
 }
 
 export default function ChatPanel({
@@ -23,39 +74,43 @@ export default function ChatPanel({
   agentId: string
   agentName: string
 }) {
-  const [messages,      setMessages]      = useState<Message[]>([])
-  const [input,         setInput]         = useState('')
-  const [loading,       setLoading]       = useState(false)
-  const [error,         setError]         = useState<string | null>(null)
-  const [interrupted,   setInterrupted]   = useState(false)
-  const [thinkingLabel, setThinkingLabel] = useState<string | null>(null)
-  const bottomRef                         = useRef<HTMLDivElement>(null)
-  const abortRef                          = useRef<AbortController | null>(null)
+  const [messages,        setMessages]        = useState<Message[]>([])
+  const [input,           setInput]           = useState('')
+  const [thinkingState,   setThinkingState]   = useState<ThinkingState>('idle')
+  const [error,           setError]           = useState<string | null>(null)
+  const [interrupted,     setInterrupted]     = useState(false)
+  // Tracks which assistant message indices have their Sources panel expanded.
+  const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
+  const bottomRef                             = useRef<HTMLDivElement>(null)
+  const abortRef                              = useRef<AbortController | null>(null)
+
+  const isWorking = thinkingState !== 'idle'
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+  }, [messages, thinkingState])
 
   async function handleSend() {
     const text = input.trim()
-    if (!text || loading) return
+    if (!text || isWorking) return
 
-    const userMessage: Message  = { role: 'user', content: text }
-    const nextMessages          = [...messages, userMessage]
+    const userMessage: Message = { role: 'user', content: text }
+    const nextMessages         = [...messages, userMessage]
 
     setMessages(nextMessages)
     setInput('')
-    setLoading(true)
+    setThinkingState('thinking')
     setError(null)
     setInterrupted(false)
-    setThinkingLabel(null)
 
-    const controller  = new AbortController()
-    abortRef.current  = controller
+    const controller = new AbortController()
+    abortRef.current = controller
 
-    // Declared outside try so the catch block can read it to decide whether
-    // a network error interrupted a partial reply or a blank response.
+    // Accumulated text — read by the catch block to decide interrupted vs failed.
     let fullContent = ''
+    // Attribution from the most recent tool call — attached to the assistant
+    // message once text starts arriving from the second Claude call.
+    let pendingAttribution: Pick<Message, 'sources' | 'documentUsed'> | null = null
 
     try {
       const res = await fetch('/api/chat', {
@@ -65,8 +120,8 @@ export default function ChatPanel({
         signal:  controller.signal,
       })
 
-      // Error responses are still JSON — parse them before reading the body
-      // as a stream, because you can only consume a response body once.
+      // Error responses are JSON — parse before reading as stream (body can only
+      // be consumed once).
       if (!res.ok) {
         const data = await res.json()
         setMessages(messages)
@@ -81,60 +136,66 @@ export default function ChatPanel({
         return
       }
 
-      const reader  = res.body!.getReader()
-      const decoder = new TextDecoder()
-
-      // Buffer incomplete SSE lines across chunk boundaries.
-      // The route emits: data: {"type":"text","text":"…"}\n\n
-      //                  data: {"type":"tool_call","tool":"…"}\n\n
-      let sseBuffer = ''
+      const reader    = res.body!.getReader()
+      const decoder   = new TextDecoder()
+      let   sseBuffer = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        // { stream: true } keeps the decoder's internal buffer across calls
-        // so multi-byte characters split across chunk boundaries decode correctly.
         sseBuffer += decoder.decode(value, { stream: true })
 
-        // Split on double-newline (SSE event boundary). The final element is
-        // an incomplete event — keep it in the buffer for the next chunk.
+        // Split on SSE event boundary. Keep the trailing incomplete event in
+        // the buffer so multi-chunk events decode correctly.
         const parts = sseBuffer.split('\n\n')
         sseBuffer = parts.pop() ?? ''
 
         for (const part of parts) {
           if (!part.startsWith('data: ')) continue
           try {
-            const event = JSON.parse(part.slice(6)) as { type: string; text?: string; tool?: string }
+            const event = JSON.parse(part.slice(6)) as {
+              type:          string
+              text?:         string
+              tool?:         string
+              sources?:      string[]
+              documentUsed?: string
+            }
+
             if (event.type === 'text' && event.text) {
               fullContent += event.text
-              setMessages([...nextMessages, { role: 'assistant', content: fullContent }])
+              setMessages([
+                ...nextMessages,
+                { role: 'assistant', content: fullContent, ...pendingAttribution },
+              ])
             } else if (event.type === 'tool_call' && event.tool) {
-              setThinkingLabel(TOOL_LABELS[event.tool] ?? 'Thinking...')
+              setThinkingState(TOOL_TO_STATE[event.tool] ?? 'thinking')
+            } else if (event.type === 'attribution') {
+              pendingAttribution = {
+                ...(event.sources      && { sources:      event.sources }),
+                ...(event.documentUsed && { documentUsed: event.documentUsed }),
+              }
             }
           } catch {
-            // Malformed SSE event — ignore and continue.
+            // Malformed SSE event — skip and continue.
           }
         }
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        // User clicked Stop — keep whatever arrived, no error, no rollback.
-        // The input was already cleared when Send was clicked; leave it clear.
+        // User clicked Stop — keep whatever arrived, no error shown.
         return
       }
 
       if (fullContent) {
-        // Stream dropped mid-reply — keep the partial text, flag it as interrupted.
         setInterrupted(true)
       } else {
-        // Nothing arrived at all — connection failed before the stream opened.
         setMessages(messages)
         setInput(text)
         setError('Connection lost — check your internet and retry.')
       }
     } finally {
-      setLoading(false)
+      setThinkingState('idle')
       abortRef.current = null
     }
   }
@@ -148,6 +209,15 @@ export default function ChatPanel({
     setMessages([])
     setError(null)
     setInterrupted(false)
+    setExpandedSources(new Set())
+  }
+
+  function toggleSources(index: number) {
+    setExpandedSources(prev => {
+      const next = new Set(prev)
+      next.has(index) ? next.delete(index) : next.add(index)
+      return next
+    })
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -168,7 +238,7 @@ export default function ChatPanel({
           <Button
             variant="ghost"
             onClick={handleNewConversation}
-            disabled={loading}
+            disabled={isWorking}
             className="ml-auto h-auto p-0 text-xs text-gray-500 hover:bg-transparent hover:text-gray-300"
           >
             New conversation
@@ -198,7 +268,7 @@ export default function ChatPanel({
       {/* ── Message list ───────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
 
-        {messages.length === 0 && !loading && (
+        {messages.length === 0 && !isWorking && (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-600 text-sm">Send a message to start the conversation.</p>
           </div>
@@ -209,39 +279,86 @@ export default function ChatPanel({
             key={i}
             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
-            <div
-              className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
-                msg.role === 'user'
-                  ? 'bg-violet-600 text-white rounded-br-sm'
-                  : 'bg-gray-800 text-gray-200 rounded-bl-sm'
-              }`}
-            >
-              {msg.content}
-            </div>
+            {msg.role === 'user' ? (
+              // User bubbles: plain text, no markdown parsing.
+              <div className="max-w-[75%] rounded-2xl rounded-br-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-violet-600 text-white">
+                {msg.content}
+              </div>
+            ) : (
+              // Assistant bubbles: markdown + optional attribution footer.
+              <div className="max-w-[75%] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm leading-relaxed break-words bg-gray-800 text-gray-200">
+                <ReactMarkdown components={markdownComponents}>
+                  {msg.content}
+                </ReactMarkdown>
+
+                {/* ── Sources (web search) ──────────────────────────────── */}
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-700/60">
+                    <button
+                      onClick={() => toggleSources(i)}
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                    >
+                      <span>Sources</span>
+                      <span className={`transition-transform duration-150 ${expandedSources.has(i) ? 'rotate-90' : ''}`}>
+                        ›
+                      </span>
+                    </button>
+                    {expandedSources.has(i) && (
+                      <ul className="mt-1.5 space-y-1">
+                        {msg.sources.map((url, j) => (
+                          <li key={j}>
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-violet-400 hover:text-violet-300 hover:underline break-all"
+                            >
+                              {url}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Document badge (document_reader) ─────────────────── */}
+                {msg.documentUsed && (
+                  <div className="mt-2">
+                    <Badge
+                      variant="secondary"
+                      className="text-xs text-gray-400 bg-gray-700/50 border-gray-600/40"
+                    >
+                      📄 Read from {msg.documentUsed}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
 
-        {/* Interrupted notice — shown inline below a partial AI reply after a
-            network drop, not for user-initiated stops. Clears on next send. */}
+        {/* Interrupted notice */}
         {interrupted && messages.at(-1)?.role === 'assistant' && (
           <div className="flex justify-start">
             <p className="text-xs text-gray-500 italic pl-1">Response interrupted — please retry.</p>
           </div>
         )}
 
-        {/* Thinking indicator — shown while loading, before the first text chunk
-            arrives. Shows plain dots for direct replies; shows a tool label
-            (e.g. "Calculating...") while a tool is executing between calls. */}
-        {loading && messages.at(-1)?.role !== 'assistant' && (
+        {/* ── Thinking indicator ──────────────────────────────────────────
+            Visible while working and before the first text chunk arrives.
+            Once setMessages adds the assistant bubble the condition flips
+            (messages.at(-1)?.role becomes 'assistant') and this hides. */}
+        {isWorking && messages.at(-1)?.role !== 'assistant' && (
           <div className="flex justify-start">
             <div className="bg-gray-800 rounded-2xl rounded-bl-sm px-4 py-3.5">
               <div className="flex gap-1.5 items-center">
-                {thinkingLabel && (
-                  <span className="text-xs text-gray-400 mr-0.5">{thinkingLabel}</span>
-                )}
-                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:0ms]"   />
-                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:150ms]" />
-                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:300ms]" />
+                <span className="text-xs text-gray-400 mr-0.5">
+                  {STATE_LABELS[thinkingState as Exclude<ThinkingState, 'idle'>]}
+                </span>
+                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-pulse [animation-delay:0ms]"   />
+                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-pulse [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-pulse [animation-delay:300ms]" />
               </div>
             </div>
           </div>
@@ -258,11 +375,11 @@ export default function ChatPanel({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={loading}
+            disabled={isWorking}
             placeholder={`Message ${agentName}…`}
             className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50"
           />
-          {loading ? (
+          {isWorking ? (
             <Button
               variant="outline"
               onClick={handleStop}
@@ -276,7 +393,7 @@ export default function ChatPanel({
           ) : (
             <Button
               onClick={handleSend}
-              disabled={!input.trim()}
+              disabled={!input.trim() || thinkingState !== 'idle'}
               className="gap-2 bg-violet-600 hover:bg-violet-500 min-w-[90px] shrink-0 active:scale-95"
             >
               Send

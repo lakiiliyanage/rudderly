@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     // ── Tools ─────────────────────────────────────────────────────────────
     const agentConfig  = agent.config as AgentConfig
     const { capabilities } = agentConfig
-    const { documents }    = capabilities
+    const documents = capabilities.documents ?? { enabled: false, files: [] as AgentConfig['capabilities']['documents']['files'] }
 
     // dateTimeTool is always included — knowing the current date is a basic
     // orientation capability every agent should have, regardless of toggles.
@@ -120,111 +120,120 @@ export async function POST(request: Request) {
         }
 
         try {
-          // ── First Claude call ───────────────────────────────────────────
-          const firstStream = anthropic.messages.stream({
-            model:      'claude-haiku-4-5-20251001',
-            max_tokens: 1024,
-            system:     systemPrompt,
-            messages,
-            // Omit tools entirely when the array only has dateTimeTool and no
-            // toggle-gated tools — keeps the request leaner for pure text agents.
-            ...(tools.length > 0 && { tools }),
-          })
-          abortActive = () => firstStream.abort()
+          // Attribution data accumulated across all tool-use rounds.
+          const attributionSources: string[] = []
+          let   attributionDocument: string | null = null
 
-          // Stream text deltas from the first call as they arrive.
-          // If Claude decides to use a tool instead, it won't emit text here —
-          // the stop_reason check below will handle that path.
-          for await (const event of firstStream) {
-            if (cancelled) break
-            if (
-              event.type === 'content_block_delta' &&
-              event.delta.type === 'text_delta'
-            ) {
-              emit({ type: 'text', text: event.delta.text })
-            }
-          }
+          // Carry messages forward so each tool-use round has the full history.
+          let currentMessages: Anthropic.MessageParam[] = [...messages]
 
-          if (cancelled) return
-          abortActive = null
+          const MAX_ITERATIONS = 5
 
-          const firstMsg = await firstStream.finalMessage()
-
-          // Pure text response — already streamed above, nothing more to do.
-          if (firstMsg.stop_reason !== 'tool_use') return
-
-          // ── Tool execution ──────────────────────────────────────────────
-          const toolUseBlocks = firstMsg.content.filter(
-            (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
-          )
-
-          const toolResults: Anthropic.ToolResultBlockParam[] = []
-
-          for (const block of toolUseBlocks) {
+          for (let i = 0; i < MAX_ITERATIONS; i++) {
             if (cancelled) return
 
-            // Tell the client which tool is running so it can update its
-            // thinking indicator label (e.g. "Calculating..." or "Searching…").
-            emit({ type: 'tool_call', tool: block.name })
-
-            let result: string
-            try {
-              result = await dispatchToolCall(
-                block.name,
-                block.input as Record<string, unknown>,
-                { allowedFileIds }
-              )
-            } catch (err) {
-              // Tool failure is non-fatal. Send a fallback result so Claude can
-              // answer from its own knowledge rather than returning a 500.
-              result =
-                `The ${block.name} tool encountered an error. ` +
-                'Please answer from your general knowledge instead.'
-              console.error(`[chat] tool error (${block.name}):`, err)
-            }
-
-            toolResults.push({
-              type:        'tool_result',
-              tool_use_id: block.id,
-              content:     result,
+            const stream = anthropic.messages.stream({
+              model:      'claude-haiku-4-5-20251001',
+              max_tokens: 1024,
+              system:     systemPrompt,
+              messages:   currentMessages,
+              ...(tools.length > 0 && { tools }),
             })
-          }
+            abortActive = () => stream.abort()
 
-          if (cancelled) return
-
-          // ── Second Claude call ──────────────────────────────────────────
-          // Append the assistant's tool_use turn and the tool_result turn, then
-          // ask Claude to produce its final answer.
-          const secondMessages: Anthropic.MessageParam[] = [
-            ...messages,
-            {
-              role:    'assistant' as const,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              content: firstMsg.content as any,
-            },
-            {
-              role:    'user' as const,
-              content: toolResults,
-            },
-          ]
-
-          const secondStream = anthropic.messages.stream({
-            model:      'claude-haiku-4-5-20251001',
-            max_tokens: 1024,
-            system:     systemPrompt,
-            messages:   secondMessages,
-            ...(tools.length > 0 && { tools }),
-          })
-          abortActive = () => secondStream.abort()
-
-          for await (const event of secondStream) {
-            if (cancelled) break
-            if (
-              event.type === 'content_block_delta' &&
-              event.delta.type === 'text_delta'
-            ) {
-              emit({ type: 'text', text: event.delta.text })
+            // Stream text deltas as they arrive. On tool-use turns Claude emits
+            // no text, so this is effectively a no-op until the final turn.
+            for await (const event of stream) {
+              if (cancelled) break
+              if (
+                event.type === 'content_block_delta' &&
+                event.delta.type === 'text_delta'
+              ) {
+                emit({ type: 'text', text: event.delta.text })
+              }
             }
+
+            if (cancelled) return
+            abortActive = null
+
+            const msg = await stream.finalMessage()
+
+            // Final response — text was already streamed above.
+            if (msg.stop_reason !== 'tool_use') break
+
+            // ── Tool execution ────────────────────────────────────────────
+            const toolUseBlocks = msg.content.filter(
+              (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+            )
+
+            const toolResults: Anthropic.ToolResultBlockParam[] = []
+
+            for (const block of toolUseBlocks) {
+              if (cancelled) return
+
+              emit({ type: 'tool_call', tool: block.name })
+
+              let result: string
+              try {
+                result = await dispatchToolCall(
+                  block.name,
+                  block.input as Record<string, unknown>,
+                  { allowedFileIds }
+                )
+              } catch (err) {
+                result =
+                  `The ${block.name} tool encountered an error. ` +
+                  'Please answer from your general knowledge instead.'
+                console.error(`[chat] tool error (${block.name}):`, err)
+              }
+
+              // ── Attribution extraction ──────────────────────────────────
+              if (block.name === 'web_search') {
+                const urls = result!.split('\n')
+                  .filter(line => /^   https?:\/\/\S/.test(line))
+                  .map(line => line.trim())
+                attributionSources.push(...urls)
+              } else if (block.name === 'document_reader') {
+                if (result!.startsWith('Document content:')) {
+                  const fileId = (block.input as { fileId: string }).fileId
+                  const file   = documents.files.find(f => f.id === fileId)
+                  if (file) attributionDocument = file.name
+                }
+              }
+
+              toolResults.push({
+                type:        'tool_result',
+                tool_use_id: block.id,
+                content:     result!,
+              })
+            }
+
+            // Emit accumulated attribution after each tool round so the client
+            // has the latest sources ready before the final text stream begins.
+            if (attributionSources.length > 0 || attributionDocument) {
+              emit({
+                type: 'attribution',
+                ...(attributionSources.length > 0 && { sources: [...attributionSources] }),
+                ...(attributionDocument               && { documentUsed: attributionDocument }),
+              })
+            }
+
+            if (cancelled) return
+
+            // Append this round's assistant + tool_result turns so the next
+            // iteration has the complete conversation context.
+            currentMessages = [
+              ...currentMessages,
+              {
+                role:    'assistant' as const,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                content: msg.content as any,
+              },
+              {
+                role:    'user' as const,
+                content: toolResults,
+              },
+            ]
           }
 
         } catch (err) {

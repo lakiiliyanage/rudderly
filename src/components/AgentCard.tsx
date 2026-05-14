@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
 const PERSONALITY_BADGE: Record<string, string> = {
@@ -37,15 +38,27 @@ interface AgentCardProps {
 export default function AgentCard({
   id, name, description, personality, createdAt, onDelete,
 }: AgentCardProps) {
+  const router   = useRouter()
   const badgeCls = PERSONALITY_BADGE[personality]
 
-  function handleDelete() {
+  function handleEdit(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    router.push(`/agents/${id}/edit`)
+  }
+
+  function handleDelete(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
     onDelete?.(id)
   }
 
   return (
-    <div className="group bg-gray-900 border border-gray-800 hover:border-violet-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.07)] rounded-2xl p-5 transition-all duration-200">
+    <Link
+      href={`/agents/${id}`}
+      className="group block bg-gray-900 border border-gray-800 hover:border-violet-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.07)] rounded-2xl p-5 transition-all duration-200"
+    >
 
       {/* Name + personality badge */}
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -72,12 +85,12 @@ export default function AgentCard({
         </span>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <Link
-            href={`/agents/${id}`}
+          <button
+            onClick={handleEdit}
             className="text-xs font-medium text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 px-2.5 py-1.5 rounded-lg transition-all"
           >
             Edit
-          </Link>
+          </button>
 
           <Button
             variant="destructive"
@@ -90,6 +103,6 @@ export default function AgentCard({
         </div>
       </div>
 
-    </div>
+    </Link>
   )
 }

@@ -98,23 +98,49 @@ const defaultConfig: AgentConfig = {
 
 // ── Wizard shell ───────────────────────────────────────────────────────────────
 
-export default function AgentWizard() {
-  const router = useRouter()
+interface AgentWizardProps {
+  /** When set, the wizard pre-fills with existing data and PATCHes on save. */
+  agentId?:            string
+  initialName?:        string
+  initialDescription?: string
+  initialConfig?:      AgentConfig
+}
+
+export default function AgentWizard({
+  agentId,
+  initialName        = '',
+  initialDescription = '',
+  initialConfig,
+}: AgentWizardProps = {}) {
+  const router    = useRouter()
+  const isEditing = !!agentId
 
   const [currentStep, setCurrentStep] = useState(1)
   const [direction, setDirection]         = useState(1)
-  const [agentConfig, setAgentConfig] = useState<AgentConfig>(defaultConfig)
-  const [typeSelected, setTypeSelected]   = useState(false)
+  const [agentConfig, setAgentConfig] = useState<AgentConfig>(
+    initialConfig
+      ? {
+          ...defaultConfig,
+          ...initialConfig,
+          capabilities: {
+            ...defaultConfig.capabilities,
+            ...initialConfig.capabilities,
+            documents: initialConfig.capabilities?.documents ?? { enabled: false, files: [] },
+          },
+        }
+      : defaultConfig
+  )
+  const [typeSelected, setTypeSelected]   = useState(isEditing)
   const [showTypeError, setShowTypeError] = useState(false)
 
   // Step 5 — name / description / save state
-  const [agentName, setAgentName]           = useState('')
-  const [agentDescription, setAgentDescription] = useState('')
+  const [agentName, setAgentName]           = useState(initialName)
+  const [agentDescription, setAgentDescription] = useState(initialDescription)
   const [showNameError, setShowNameError]   = useState(false)
   const [showSaveError, setShowSaveError]   = useState(false)
   const [isSaving, setIsSaving]             = useState(false)
 
-  // ── Draft / auto-save ─────────────────────────────────────────────────────
+  // ── Draft / auto-save (create mode only) ─────────────────────────────────
   const [draft, setDraft] = useState<Draft | null>(null)
 
   // Ref always holds the latest values so the interval closure never goes stale.
@@ -123,25 +149,27 @@ export default function AgentWizard() {
     draftRef.current = { agentConfig, currentStep, typeSelected, agentName, agentDescription }
   }, [agentConfig, currentStep, typeSelected, agentName, agentDescription])
 
-  // Load any existing draft on first render.
+  // Load any existing draft on first render (create mode only).
   useEffect(() => {
+    if (isEditing) return
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
       if (raw) setDraft(JSON.parse(raw) as Draft)
     } catch {
       localStorage.removeItem(DRAFT_KEY)
     }
-  }, [])
+  }, [isEditing])
 
-  // Auto-save every 30 seconds.
+  // Auto-save every 30 seconds (create mode only).
   useEffect(() => {
+    if (isEditing) return
     const id = setInterval(() => {
       const { agentConfig, currentStep, typeSelected, agentName, agentDescription } = draftRef.current
       const payload: Draft = { agentConfig, currentStep, typeSelected, agentName, agentDescription, savedAt: new Date().toISOString() }
       localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
     }, 30_000)
     return () => clearInterval(id)
-  }, [])
+  }, [isEditing])
 
   function handleResumeDraft() {
     if (!draft) return
@@ -210,8 +238,11 @@ export default function AgentWizard() {
     setIsSaving(true)
 
     try {
-      const res = await fetch('/api/agents', {
-        method:  'POST',
+      const url    = isEditing ? `/api/agents/${agentId}` : '/api/agents'
+      const method = isEditing ? 'PATCH' : 'POST'
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           name:        agentName.trim(),
@@ -226,8 +257,8 @@ export default function AgentWizard() {
       }
 
       const agent = await res.json()
-      localStorage.removeItem(DRAFT_KEY)
-      router.push(`/agents/${agent.id}?created=true`)
+      if (!isEditing) localStorage.removeItem(DRAFT_KEY)
+      router.push(isEditing ? `/agents/${agentId}` : `/agents/${agent.id}?created=true`)
     } catch {
       setShowSaveError(true)
     } finally {
@@ -684,22 +715,22 @@ function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
 
   const enabledCount =
     CAPABILITIES.filter(({ key }) => capabilities[key]).length +
-    (capabilities.documents.enabled ? 1 : 0)
+    (capabilities.documents?.enabled ? 1 : 0)
 
   function toggle(key: Exclude<keyof AgentConfig['capabilities'], 'documents'>, checked: boolean) {
     onChange({ ...capabilities, [key]: checked })
   }
 
   function toggleDocuments(checked: boolean) {
-    onChange({ ...capabilities, documents: { ...capabilities.documents, enabled: checked } })
+    onChange({ ...capabilities, documents: { ...(capabilities.documents ?? { enabled: false, files: [] }), enabled: checked } })
   }
 
   function removeFile(id: string) {
     onChange({
       ...capabilities,
       documents: {
-        ...capabilities.documents,
-        files: capabilities.documents.files.filter(f => f.id !== id),
+        ...(capabilities.documents ?? { enabled: false, files: [] }),
+        files: (capabilities.documents?.files ?? []).filter(f => f.id !== id),
       },
     })
   }
@@ -712,7 +743,7 @@ function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
       return
     }
     const fileId = match[1]
-    if (capabilities.documents.files.some(f => f.id === fileId)) {
+    if ((capabilities.documents?.files ?? []).some(f => f.id === fileId)) {
       setUrlError('This document has already been added.')
       return
     }
@@ -735,8 +766,8 @@ function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
       onChange({
         ...capabilities,
         documents: {
-          ...capabilities.documents,
-          files: [...capabilities.documents.files, { id, name }],
+          ...(capabilities.documents ?? { enabled: false, files: [] }),
+          files: [...(capabilities.documents?.files ?? []), { id, name }],
         },
       })
       setDriveUrl('')
@@ -778,13 +809,13 @@ function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
               <p className="text-xs text-gray-400 mt-0.5">Query files from Google Drive.</p>
             </div>
             <Switch
-              checked={capabilities.documents.enabled}
+              checked={capabilities.documents?.enabled ?? false}
               onCheckedChange={toggleDocuments}
               aria-label="Documents"
             />
           </div>
 
-          {capabilities.documents.enabled && (
+          {capabilities.documents?.enabled && (
             <div className="mt-4 space-y-3">
               <div className="flex gap-2">
                 <input
@@ -814,9 +845,9 @@ function CapabilitiesStep({ capabilities, onChange }: CapabilitiesStepProps) {
                 <p className="text-xs text-red-400">{urlError}</p>
               )}
 
-              {capabilities.documents.files.length > 0 && (
+              {(capabilities.documents?.files ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {capabilities.documents.files.map(file => (
+                  {(capabilities.documents?.files ?? []).map(file => (
                     <Badge key={file.id} variant="secondary" className="gap-1.5 max-w-[220px]">
                       <span className="truncate">{file.name}</span>
                       <button
@@ -1241,7 +1272,7 @@ function AgentPreviewPanel({ agentConfig, agentName, typeSelected }: AgentPrevie
   const selectedType       = typeSelected ? AGENT_TYPES.find(t => t.value === agentConfig.type) : null
   const enabledCapabilities = [
     ...CAPABILITIES.filter(({ key }) => agentConfig.capabilities[key]),
-    ...(agentConfig.capabilities.documents.enabled ? [{ key: 'documents' as const, label: 'Documents' }] : []),
+    ...(agentConfig.capabilities.documents?.enabled ? [{ key: 'documents' as const, label: 'Documents' }] : []),
   ]
 
   return (

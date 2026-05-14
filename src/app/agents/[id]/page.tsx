@@ -12,6 +12,7 @@ import Link from 'next/link'
 import DeleteButton from './DeleteButton'
 import ChatPanel from './ChatPanel'
 import CreatedBanner from './CreatedBanner'
+import { Badge } from '@/components/ui/badge'
 import type { AgentConfig } from '@/lib/types/agent'
 
 interface AgentPageProps {
@@ -41,6 +42,13 @@ export default async function AgentPage({ params, searchParams }: AgentPageProps
   const capabilityCount = config.capabilities
     ? Object.values(config.capabilities).filter(Boolean).length
     : 0
+
+  // Capability badge list — displayed in the agent header.
+  const caps = config.capabilities
+  const capBadges: { key: string; label: string }[] = []
+  if (caps?.webSearch)          capBadges.push({ key: 'webSearch',  label: '🔍 Web search' })
+  if (caps?.calculator)         capBadges.push({ key: 'calculator', label: '🧮 Calculator' })
+  if (caps?.documents?.enabled) capBadges.push({ key: 'documents',  label: `📄 Documents (${caps.documents.files.length})` })
 
   const date = new Intl.DateTimeFormat('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
@@ -79,6 +87,19 @@ export default async function AgentPage({ params, searchParams }: AgentPageProps
               <p className="text-gray-400 text-sm mt-1 max-w-xl">{agent.description}</p>
             )}
             <p className="text-gray-600 text-xs mt-2">Created {date}</p>
+
+            {/* Capability badges */}
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {capBadges.length > 0 ? capBadges.map(b => (
+                <Badge key={b.key} variant="secondary" className="text-xs text-gray-300 bg-gray-800 border border-gray-700">
+                  {b.label}
+                </Badge>
+              )) : (
+                <Badge variant="secondary" className="text-xs text-gray-500 bg-gray-800 border border-gray-700">
+                  💬 Chat only
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
 
