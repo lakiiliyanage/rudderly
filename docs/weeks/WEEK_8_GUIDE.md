@@ -2,7 +2,7 @@
 
 **Phase:** 3 — Building the Product
 **Dates:** Add your own start date
-**Total time:** 8–10 hrs core · +4–5 hrs stretch
+**Total time:** 8–10 hrs core · +6–8 hrs stretch
 **Goal:** Give your agents real-world superpowers. Right now they can only chat — this week you add the ability to search the web, do maths, know the current date and time, and read documents from Google Drive. You'll also wire up the tool toggles you built in Week 7 so they actually do something. By the end, a "Research Assistant" agent will find real information on the internet *and* draw on your own documents to answer questions. This is the "wow" moment for demos.
 
 ---
@@ -186,6 +186,8 @@ Google Drive API access for publicly-shared files requires a single API key from
 6. At the top of the Credentials page, click **+ Create Credentials** → **API key** (this fourth option only appears from this top-level Credentials page)
 7. The key is generated immediately — copy it (it will look like `AIzaSy...`)
 8. Click **Edit API key** → under "API restrictions", select "Restrict key" → choose "Google Drive API" — this limits the key to Drive only, reducing risk if it's ever exposed
+
+> ⚠️ **Do NOT tick "Authenticate API calls through a service account"** — this option appears on the key editing screen and is required only for Google's Vertex AI Agent Platform and other APIs that mandate service account authentication. For a standard Drive API key used to read publicly-shared files, leave this unticked. Ticking it adds unnecessary complexity with no benefit for this use case.
 
 Add it to `.env.local`:
 
@@ -401,13 +403,15 @@ Ask Claude Code:
 >
 > *5. **First Claude call** — send the messages with the tools array. If `stop_reason` is `'end_turn'` (Claude's signal that it is finished — no more tool calls to make), stream the text content blocks back to the client as before.*
 >
-> *6. **Handle `tool_use` stop reason** — if `stop_reason` is `'tool_use'` (Claude's signal that it wants to call a tool before it can finish its answer), do the following:*
+> *6. **Handle `tool_use` stop reason with a while loop** — wrap the tool-use handling in a `while` loop that continues as long as `stop_reason === 'tool_use'`, up to a maximum of 5 iterations (to prevent infinite loops). This is critical: Claude may need to call multiple tools in sequence — for example, reading a document then searching the web in the same turn. A single-pass approach (one Claude call → one round of tools → one final call) silently produces an empty response when Claude wants to call a second tool after receiving the first result. The while loop handles this correctly:*
+>    - *While `stop_reason === 'tool_use'` (and iteration count < 5):*
 >    - *Find all `tool_use` content blocks in the response (Claude may request multiple tools in one response)*
 >    - *For each tool_use block: before running, send a streaming event: `data: { type: 'tool_call', tool: block.name }\n\n` — this tells the client to update the thinking indicator*
 >    - *Call `dispatchToolCall(block.name, block.input, { allowedFileIds })` to actually run the tool*
 >    - *Build a `tool_result` message (the formatted reply you send back to Claude containing the tool's output) and append it to the messages array*
->    - *Make a second Claude API call with the updated messages*
->    - *Stream the final text response from that second call back to the client*
+>    - *Make the next Claude API call with the updated messages and loop back to check `stop_reason` again*
+>    - *When `stop_reason === 'end_turn'`: exit the loop and stream the final text response back to the client*
+>    - *If the loop hits 5 iterations without `end_turn`: send a graceful fallback: 'I wasn't able to complete the research in time — please try again.'*
 >
 > *7. **Auth check** — return 401 (Unauthorised — not logged in) if no session; 403 (Forbidden — not the owner of this agent) if the agent belongs to a different user.*
 >
@@ -511,6 +515,66 @@ Ask Claude Code:
 
 ---
 
+### 🐛 Known Issues & Defensive Fixes (apply before Step 10)
+
+Two bugs surface during testing that must be fixed before the Research Assistant test will work reliably. Apply both now.
+
+**Fix A — Old agents crash when `documents` is undefined**
+
+Agents created before Week 8 don't have a `documents` key in their Supabase config. When the chat route or the builder loads one of these agents and tries to access `capabilities.documents.enabled`, JavaScript throws `Cannot read properties of undefined (reading 'enabled')` — crashing the page or the API route silently.
+
+Ask Claude Code:
+> *"There is a runtime crash: `Cannot read properties of undefined (reading 'enabled')`. The root cause is that agents saved to Supabase before the `documents` capability was added don't have a `documents` key in their `capabilities` object — so `capabilities.documents` is `undefined` everywhere it's accessed.*
+>
+> *Fix this in two places:*
+>
+> *1. In `src/app/api/chat/route.ts`, on the line that does `const { documents } = capabilities`, replace it with:*
+> ```typescript
+> const documents = capabilities.documents ?? { enabled: false, files: [] }
+> ```
+> *The `??` operator (nullish coalescing — returns the right-hand value when the left side is `null` or `undefined`) ensures `documents` always has a safe default shape even for old agents.*
+>
+> *2. In `src/app/agents/new/AgentWizard.tsx`, find every place that accesses `capabilities.documents` or `agentConfig.capabilities.documents` and add optional chaining (`?.`) or a fallback:*
+> - *`capabilities.documents.enabled` → `capabilities.documents?.enabled`*
+> - *`capabilities.documents.files` → `capabilities.documents?.files ?? []`*
+> - *Any spread like `{ ...capabilities.documents }` → `{ ...(capabilities.documents ?? { enabled: false, files: [] }) }`*
+> - *In `AgentPreviewPanel`: `agentConfig.capabilities.documents.enabled` → `agentConfig.capabilities.documents?.enabled`*
+>
+> *After fixing, verify:*
+> - *Open the chat page for an agent created before Week 8 → page loads without crash, chat works*
+> - *Open `/agents/new` → builder loads without console errors*
+> - *Send a message requiring web search on an agent with documents configured → response completes successfully*
+> *Do not mark complete until all three pass."*
+
+**Fix B — Edit mode fails to save on old agents (validation crash)**
+
+When editing an agent in the wizard, `AgentWizard` initialises its state with `initialConfig ?? defaultConfig`. Since `initialConfig` exists (it's the agent's stored config object), the wizard uses it as-is — but old configs missing `documents` fail Zod validation on save, showing "Something went wrong saving your agent."
+
+Ask Claude Code:
+> *"In `src/app/agents/new/AgentWizard.tsx`, the `useState` initialisation for `agentConfig` uses `initialConfig ?? defaultConfig`. This breaks in edit mode when `initialConfig` is an old agent config missing the `documents` field — Zod validation on PATCH fails with a 400. Fix by deep-merging `initialConfig` with `defaultConfig` so missing fields get safe defaults:*
+> ```typescript
+> useState<AgentConfig>(
+>   initialConfig
+>     ? {
+>         ...defaultConfig,
+>         ...initialConfig,
+>         capabilities: {
+>           ...defaultConfig.capabilities,
+>           ...initialConfig.capabilities,
+>           documents: initialConfig.capabilities?.documents ?? { enabled: false, files: [] },
+>         },
+>       }
+>     : defaultConfig
+> )
+> ```
+> *After fixing, verify:*
+> - *Edit an old agent → change any capability → click Save Agent → saves successfully, redirects to chat page*
+> - *Edit a new agent that has documents configured → documents toggle is still ON with files intact*
+> - *Create a brand new agent → wizard still works normally*
+> *Do not mark complete until all three pass."*
+
+---
+
 ### Step 10 — Test the Full Research Assistant Agent
 
 This is the milestone moment. Create a test agent that combines web search and documents.
@@ -589,6 +653,39 @@ Ask Claude Code:
 > *- In the builder Step 5 test dialog, with documents configured, ask a question the document answers → Claude uses `document_reader` and returns content from the actual document*
 > *- In the builder Step 5 test dialog, with documents NOT configured, ask the same question → Claude answers from general knowledge only*
 > *Do not mark complete until both pass."*
+
+---
+
+### Step 14 — Fix the Edit Button + Create the Agent Edit Route
+
+The Edit button on the agent chat page links to `/agents/${id}/edit` but that route doesn't exist — it returns a 404. This is a critical UX gap: users have no way to modify an agent after creating it.
+
+Ask Claude Code:
+> *"The Edit button on the agent chat page (`src/app/agents/[id]/page.tsx`) links to `/agents/${id}/edit` but that route doesn't exist. Create `src/app/agents/[id]/edit/page.tsx` that:*
+> 1. *Loads the agent's full record from Supabase using the `id` param — return 404 if not found, redirect to `/auth/login` if not authenticated, return 403 if the agent belongs to another user*
+> 2. *Renders `AgentWizard` pre-populated with the agent's existing `name`, `description`, and `config` using the `initialName`, `initialDescription`, `initialConfig`, and `agentId` props*
+> 3. *On save, the wizard already uses `PATCH /api/agents/${agentId}` when `agentId` is set — confirm this is wired correctly and redirects to `/agents/${id}` on success*
+>
+> *After building, verify:*
+> - *Click Edit on any agent → wizard opens with the agent's existing name, description, personality, and capabilities pre-filled*
+> - *Change a capability and click Save Agent → redirects back to the chat page with the updated settings*
+> - *Visiting `/agents/[other-user-id]/edit` → returns 403 or 404, never shows another user's agent*
+> *Do not mark complete until all three pass."*
+
+---
+
+### Step 15 — Make Dashboard Agent Cards Clickable
+
+On the dashboard, users can only navigate to an agent by clicking the small "Edit" button — clicking the card itself does nothing. This is the opposite of expected behaviour: the card should be the primary navigation target.
+
+Ask Claude Code:
+> *"In `src/components/AgentCard.tsx`, the card body is not clickable — only the Edit button navigates to the agent. Fix this so clicking anywhere on the card navigates to `/agents/${id}`. Wrap the card's outer container in a `Link` from `next/link` pointing to `/agents/${id}`. Keep the Edit and Delete buttons functional — add `e.stopPropagation()` to the Delete button's `onClick` handler so clicking Delete doesn't also trigger the card navigation. The Edit button can remain as-is or be updated to link to `/agents/${id}/edit` now that that route exists.*
+>
+> *After building, verify:*
+> - *Click the card body (not the buttons) on the dashboard → navigates to the agent chat page*
+> - *Click the Edit button → navigates to the edit page*
+> - *Click Delete → deletes the agent, no navigation triggered*
+> *Do not mark complete until all three pass."*
 
 ---
 
@@ -684,6 +781,54 @@ Ask Claude Code:
 
 ---
 
+### Stretch 4 — CLAUDE.md Archival System (30 min)
+
+By Week 8, `CLAUDE.md` has grown past 8,000 characters. Claude Code reads this file on every session startup — a bloated file wastes context window space on stale history instead of current architecture. This stretch task sets up a sustainable archival process that keeps `CLAUDE.md` lean without losing important decisions.
+
+**Why this matters:** `CLAUDE.md` should answer "what is this codebase *right now*?" — not "what did we build over time?" Git history already answers the latter. The principle is: *signal density over length*.
+
+**What stays in CLAUDE.md:** current architecture, active coding decisions that affect daily work, non-obvious patterns Claude would otherwise get wrong, environment setup, current week's focus.
+
+**What gets archived:** week-by-week build summaries beyond one-liners, decisions that are now just normal code patterns, context that is self-evident from reading the code.
+
+Ask Claude Code:
+> *"Set up a CLAUDE.md archival system for this project:*
+>
+> *1. Create `docs/CLAUDE_ARCHIVE.md`. Populate it by extracting content from `CLAUDE.md` that is historical rather than operational. For each archived item, keep:*
+> ```markdown
+> # AgentForge — Decision Archive
+>
+> > Reference this file with @docs/CLAUDE_ARCHIVE.md when debugging legacy
+> > behaviour or revisiting architectural decisions from earlier weeks.
+> > Do not @-import this file by default — load it on demand only.
+>
+> ## Week N — [Topic]
+> **Decision:** ...
+> **Why:** ...
+> **Still relevant:** yes / no / partial
+> ```
+> *The 'Why' is what makes archived content worth keeping — the code shows the what, the archive preserves the reasoning.*
+>
+> *2. After populating the archive, trim `CLAUDE.md` to under 4,000 characters. Do not remove: the stack version table, key patterns, env vars, the Supabase project ID warning, memory rules, current focus, or the prompt template. The one-line week summaries in Completed Work stay — only detail beyond that gets archived.*
+>
+> *3. Add this block to `CLAUDE.md` under a new `## Reference Docs` section:*
+> ```markdown
+> ## Reference Docs
+> - @AGENTS.md — Next.js version warning (always loaded)
+> - `docs/CLAUDE_ARCHIVE.md` — trimmed decisions and historical context.
+>   Load with @docs/CLAUDE_ARCHIVE.md when debugging legacy behaviour or
+>   revisiting earlier architectural decisions. Do not load by default.
+> - `docs/weeks/WEEK_X_GUIDE.md` — load only the current week's guide, never older ones.
+> ```
+>
+> *Before making any changes, show me a list of what you plan to move to the archive and why. Wait for my confirmation before editing either file.*
+>
+> *After confirming and applying changes, report: (a) final character count of `CLAUDE.md`, (b) what was moved and why, (c) anything you chose NOT to archive and why."*
+
+> 💡 **When to use the archive going forward:** At each sprint-close, if `CLAUDE.md` exceeds 6,000 characters, run this process again — move the oldest week's detail into the archive and trim. The archive grows over time; `CLAUDE.md` stays lean.
+
+---
+
 ## 💾 Commit Checkpoint — Stretch Tasks (if attempted)
 
 ```bash
@@ -743,6 +888,11 @@ Work through these top to bottom. Don't mark anything done until you've actually
 - [ ] '💬 Chat only' badge shown when no capabilities enabled
 - [ ] `/api/chat/preview` also supports tool use and document reading
 - [ ] Tool toggle → Supabase → chat route → API call chain verified end-to-end for all capabilities
+- [ ] Chat route agentic loop uses a while loop (max 5 iterations) — handles multi-tool sequential calls without silent empty responses
+- [ ] Old agents missing `documents` field load without crashing — defensive `?? { enabled: false, files: [] }` fallback in place
+- [ ] AgentWizard deep-merges `initialConfig` with `defaultConfig` in edit mode — old agents save successfully after editing
+- [ ] `/agents/[id]/edit` route created — Edit button navigates correctly, wizard pre-fills with existing agent data
+- [ ] AgentCard on dashboard is fully clickable — card body navigates to `/agents/${id}`, Delete button stops propagation
 - [ ] Committed with meaningful messages after each major checkpoint
 
 ---
@@ -789,4 +939,4 @@ Run these specific tests before closing out the week. Each one should produce th
 
 ---
 
-*Week 8 of 12 · AgentForge · Phase 3: Building the Product · Updated May 2026*
+*Week 8 of 13 · AgentForge · Phase 3: Building the Product · Updated May 2026*
