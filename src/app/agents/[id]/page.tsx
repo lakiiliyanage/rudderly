@@ -8,9 +8,10 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
+import { Suspense } from 'react'
 import Link from 'next/link'
 import DeleteButton from './DeleteButton'
-import ChatPanel from './ChatPanel'
+import AgentChatLayout from './AgentChatLayout'
 import CreatedBanner from './CreatedBanner'
 import { Badge } from '@/components/ui/badge'
 import type { AgentConfig } from '@/lib/types/agent'
@@ -124,8 +125,10 @@ export default async function AgentPage({ params, searchParams }: AgentPageProps
           config.capabilities, and config.limits once the agent edit form
           is updated to write the full AgentConfig shape */}
 
-      {/* ── Chat ── */}
-      <ChatPanel agentId={id} agentName={agent.name ?? 'Agent'} />
+      {/* ── Chat + History sidebar ── */}
+      <Suspense>
+        <AgentChatLayout agentId={id} agentName={agent.name ?? 'Agent'} />
+      </Suspense>
     </div>
   )
 }

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Menu } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button'
 import { Badge }   from '@/components/ui/badge'
@@ -74,21 +76,106 @@ const markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components
 export default function ChatPanel({
   agentId,
   agentName,
+  onMenuOpen,
 }: {
-  agentId: string
-  agentName: string
+  agentId:      string
+  agentName:    string
+  onMenuOpen?:  () => void
 }) {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+
   const [messages,        setMessages]        = useState<Message[]>([])
   const [input,           setInput]           = useState('')
   const [thinkingState,   setThinkingState]   = useState<ThinkingState>('idle')
   const [error,           setError]           = useState<string | null>(null)
   const [interrupted,     setInterrupted]     = useState(false)
+  const [isLoading,       setIsLoading]       = useState(!!searchParams.get('c'))
+  const [saveToast,       setSaveToast]       = useState<string | null>(null)
   // Tracks which assistant message indices have their Sources panel expanded.
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
-  const bottomRef                             = useRef<HTMLDivElement>(null)
-  const abortRef                              = useRef<AbortController | null>(null)
+  const bottomRef             = useRef<HTMLDivElement>(null)
+  const abortRef              = useRef<AbortController | null>(null)
+  // Tracks which conversation ID is currently driving the send handler.
+  const conversationIdRef     = useRef<string | null>(searchParams.get('c'))
+  // Tracks which conversation's messages are already in React state, so the
+  // load effect can skip a fetch when the send handler just created this
+  // conversation (rather than the user navigating here via the sidebar).
+  const loadedConversationRef = useRef<string | null>(null)
 
-  const isWorking = thinkingState !== 'idle'
+  const conversationId = searchParams.get('c')
+  const isWorking      = thinkingState !== 'idle'
+
+  // Reactive conversation loader — runs when the ?c= URL param changes.
+  // Distinguishes sidebar navigation (different ID → fetch) from the send
+  // handler setting the URL after creating a conversation (same ID, already
+  // in state → skip).
+  useEffect(() => {
+    if (!conversationId) {
+      // ?c= was cleared — "New conversation" in the sidebar.
+      if (loadedConversationRef.current !== null) {
+        setMessages([])
+        setError(null)
+        setInterrupted(false)
+        loadedConversationRef.current = null
+        conversationIdRef.current     = null
+      }
+      setIsLoading(false)
+      return
+    }
+
+    // Send handler already put this conversation's messages into state — skip.
+    if (conversationId === loadedConversationRef.current) {
+      setIsLoading(false)
+      return
+    }
+
+    // Navigated here from the sidebar (or page load with ?c=).
+    abortRef.current?.abort()        // cancel any in-flight stream
+    abortRef.current        = null
+    conversationIdRef.current = conversationId
+    setIsLoading(true)
+    setMessages([])
+    setThinkingState('idle')
+
+    fetch(`/api/conversations/${conversationId}`)
+      .then(async res => {
+        if (res.status === 404) {
+          conversationIdRef.current = null
+          router.replace(`/agents/${agentId}`, { scroll: false })
+          return
+        }
+        if (res.status === 403) {
+          router.replace('/dashboard')
+          return
+        }
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.messages)) {
+          setMessages(data.messages.map((m: {
+            role: 'user' | 'assistant'
+            content: string
+            sources?: string[]
+            documentUsed?: string
+          }) => ({
+            role:    m.role,
+            content: m.content,
+            ...(m.sources      && { sources:      m.sources }),
+            ...(m.documentUsed && { documentUsed: m.documentUsed }),
+          })))
+          loadedConversationRef.current = conversationId
+        }
+      })
+      .finally(() => setIsLoading(false))
+  // router and agentId are stable references; conversationId is the trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId])
+
+  useEffect(() => {
+    if (!saveToast) return
+    const t = setTimeout(() => setSaveToast(null), 5000)
+    return () => clearTimeout(t)
+  }, [saveToast])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -97,6 +184,21 @@ export default function ChatPanel({
   async function handleSend() {
     const text = input.trim()
     if (!text || isWorking) return
+
+    // ── Ensure a conversation exists ──────────────────────────────────
+    if (!conversationIdRef.current) {
+      const res = await fetch('/api/conversations', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ agent_id: agentId }),
+      })
+      if (res.status === 201) {
+        const { id } = await res.json() as { id: string }
+        conversationIdRef.current     = id
+        loadedConversationRef.current = id  // prevent effect from re-fetching
+        router.replace(`/agents/${agentId}?c=${id}`, { scroll: false })
+      }
+    }
 
     const userMessage: Message = { role: 'user', content: text }
     const nextMessages         = [...messages, userMessage]
@@ -107,6 +209,21 @@ export default function ChatPanel({
     setError(null)
     setInterrupted(false)
 
+    // Await the user save so we know whether it succeeded, but catch the
+    // error and show a toast rather than blocking or aborting the chat.
+    if (conversationIdRef.current) {
+      try {
+        const saveRes = await fetch(`/api/conversations/${conversationIdRef.current}/messages`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ role: 'user', content: text }),
+        })
+        if (!saveRes.ok) throw new Error(`status ${saveRes.status}`)
+      } catch {
+        setSaveToast("Message couldn't be saved — your chat is still working but history may not persist.")
+      }
+    }
+
     const controller = new AbortController()
     abortRef.current = controller
 
@@ -115,6 +232,8 @@ export default function ChatPanel({
     // Attribution from the most recent tool call — attached to the assistant
     // message once text starts arriving from the second Claude call.
     let pendingAttribution: Pick<Message, 'sources' | 'documentUsed'> | null = null
+    // All tools invoked during this response — persisted alongside the message.
+    const toolsUsed: { tool: string }[] = []
 
     try {
       const res = await fetch('/api/chat', {
@@ -173,6 +292,7 @@ export default function ChatPanel({
                 { role: 'assistant', content: fullContent, ...pendingAttribution },
               ])
             } else if (event.type === 'tool_call' && event.tool) {
+              toolsUsed.push({ tool: event.tool })
               setThinkingState(TOOL_TO_STATE[event.tool] ?? 'thinking')
             } else if (event.type === 'attribution') {
               pendingAttribution = {
@@ -184,6 +304,19 @@ export default function ChatPanel({
             // Malformed SSE event — skip and continue.
           }
         }
+      }
+
+      // Stream complete — persist the assistant reply (fire-and-forget).
+      if (fullContent && conversationIdRef.current) {
+        fetch(`/api/conversations/${conversationIdRef.current}/messages`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            role:       'assistant',
+            content:    fullContent,
+            tool_calls: toolsUsed.length > 0 ? toolsUsed : null,
+          }),
+        }).catch(console.error)
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -210,6 +343,9 @@ export default function ChatPanel({
 
   function handleNewConversation() {
     if (!window.confirm('Are you sure? This will clear the conversation.')) return
+    conversationIdRef.current     = null
+    loadedConversationRef.current = null
+    router.replace(`/agents/${agentId}`, { scroll: false })
     setMessages([])
     setError(null)
     setInterrupted(false)
@@ -236,7 +372,16 @@ export default function ChatPanel({
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-800 shrink-0">
-        <div className="w-2 h-2 rounded-full bg-violet-500" />
+        {onMenuOpen && (
+          <button
+            onClick={onMenuOpen}
+            aria-label="Open conversation history"
+            className="md:hidden text-gray-500 hover:text-gray-300 transition-colors -ml-1 shrink-0"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
+        <div className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
         <span className="text-sm font-medium text-white">Chat with {agentName}</span>
         {messages.length > 0 && (
           <Button
@@ -249,6 +394,25 @@ export default function ChatPanel({
           </Button>
         )}
       </div>
+
+      {/* ── Save-failure toast (amber — chat still works) ──────────────── */}
+      {saveToast && (
+        <div className="mx-4 mt-3 px-4 py-3 bg-amber-950/50 border border-amber-800/60 rounded-xl text-sm text-amber-300 shrink-0 flex items-start gap-2">
+          <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span className="flex-1">{saveToast}</span>
+          <button
+            onClick={() => setSaveToast(null)}
+            aria-label="Dismiss"
+            className="shrink-0 text-amber-400 hover:text-amber-200 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* ── Error banner ───────────────────────────────────────────────── */}
       {error && (
@@ -272,7 +436,17 @@ export default function ChatPanel({
       {/* ── Message list ───────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
 
-        {messages.length === 0 && !isWorking && (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="flex gap-1.5">
+              <span className="w-2 h-2 bg-gray-600 rounded-full animate-pulse [animation-delay:0ms]"   />
+              <span className="w-2 h-2 bg-gray-600 rounded-full animate-pulse [animation-delay:150ms]" />
+              <span className="w-2 h-2 bg-gray-600 rounded-full animate-pulse [animation-delay:300ms]" />
+            </div>
+          </div>
+        ) : null}
+
+        {!isLoading && messages.length === 0 && !isWorking && (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-600 text-sm">Send a message to start the conversation.</p>
           </div>
@@ -379,7 +553,7 @@ export default function ChatPanel({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isWorking}
+            disabled={isWorking || isLoading}
             placeholder={`Message ${agentName}…`}
             className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50"
           />
@@ -397,7 +571,7 @@ export default function ChatPanel({
           ) : (
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || thinkingState !== 'idle'}
+              disabled={!input.trim() || thinkingState !== 'idle' || isLoading}
               className="gap-2 bg-violet-600 hover:bg-violet-500 min-w-[90px] shrink-0 active:scale-95"
             >
               Send
