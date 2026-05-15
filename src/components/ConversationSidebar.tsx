@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Trash2, X } from 'lucide-react'
 
@@ -8,6 +8,11 @@ type Conversation = {
   id:         string
   title:      string | null
   created_at: string
+}
+
+export type ConversationSidebarHandle = {
+  addConversation: (conv: Conversation) => void
+  updateTitle:     (id: string, title: string) => void
 }
 
 function formatDate(iso: string) {
@@ -23,21 +28,26 @@ function Skeleton() {
   )
 }
 
-export default function ConversationSidebar({
-  agentId,
-  isOpen,
-  onClose,
-}: {
+const ConversationSidebar = forwardRef<ConversationSidebarHandle, {
   agentId: string
   isOpen:  boolean
   onClose: () => void
-}) {
+}>(function ConversationSidebar({ agentId, isOpen, onClose }, ref) {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const activeId     = searchParams.get('c')
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [isLoading,     setIsLoading]     = useState(true)
+
+  useImperativeHandle(ref, () => ({
+    addConversation(conv) {
+      setConversations(prev => [conv, ...prev])
+    },
+    updateTitle(id, title) {
+      setConversations(prev => prev.map(c => c.id === id ? { ...c, title } : c))
+    },
+  }))
 
   useEffect(() => {
     fetch(`/api/conversations?agentId=${agentId}`)
@@ -146,4 +156,6 @@ export default function ConversationSidebar({
       )}
     </>
   )
-}
+})
+
+export default ConversationSidebar

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
+import { prepareMessagesForContext } from '@/lib/context'
 import {
   dateTimeTool,
   webSearchTool,
@@ -120,6 +121,8 @@ export async function POST(request: Request) {
     // Protocol: every chunk is a Server-Sent Events line —
     //   data: {"type":"text","text":"…"}\n\n       text delta to append
     //   data: {"type":"tool_call","tool":"…"}\n\n  thinking indicator update
+    const MAX_HISTORY_MESSAGES = 40
+
     const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const encoder   = new TextEncoder()
 
@@ -141,7 +144,8 @@ export async function POST(request: Request) {
           let   attributionDocument: string | null = null
 
           // Carry messages forward so each tool-use round has the full history.
-          let currentMessages: Anthropic.MessageParam[] = [...messages]
+          const preparedMessages  = await prepareMessagesForContext(messages, MAX_HISTORY_MESSAGES, anthropic)
+          let currentMessages: Anthropic.MessageParam[] = [...preparedMessages]
 
           const MAX_ITERATIONS = 5
 

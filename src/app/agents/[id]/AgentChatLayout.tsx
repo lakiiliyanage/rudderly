@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import ConversationSidebar from '@/components/ConversationSidebar'
+import { useState, useRef } from 'react'
+import ConversationSidebar, { type ConversationSidebarHandle } from '@/components/ConversationSidebar'
 import ChatPanel from './ChatPanel'
 
 export default function AgentChatLayout({
@@ -12,10 +12,12 @@ export default function AgentChatLayout({
   agentName: string
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const sidebarRef = useRef<ConversationSidebarHandle>(null)
 
   return (
     <div className="flex gap-4 items-start">
       <ConversationSidebar
+        ref={sidebarRef}
         agentId={agentId}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -25,6 +27,12 @@ export default function AgentChatLayout({
           agentId={agentId}
           agentName={agentName}
           onMenuOpen={() => setSidebarOpen(true)}
+          onConversationCreated={conv =>
+            sidebarRef.current?.addConversation({ ...conv, title: null })
+          }
+          onTitleGenerated={(id, title) =>
+            sidebarRef.current?.updateTitle(id, title)
+          }
         />
       </div>
     </div>

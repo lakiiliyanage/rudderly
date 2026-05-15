@@ -77,10 +77,14 @@ export default function ChatPanel({
   agentId,
   agentName,
   onMenuOpen,
+  onConversationCreated,
+  onTitleGenerated,
 }: {
-  agentId:      string
-  agentName:    string
-  onMenuOpen?:  () => void
+  agentId:                string
+  agentName:              string
+  onMenuOpen?:            () => void
+  onConversationCreated?: (conv: { id: string; created_at: string }) => void
+  onTitleGenerated?:      (id: string, title: string) => void
 }) {
   const router       = useRouter()
   const searchParams = useSearchParams()
@@ -193,10 +197,11 @@ export default function ChatPanel({
         body:    JSON.stringify({ agent_id: agentId }),
       })
       if (res.status === 201) {
-        const { id } = await res.json() as { id: string }
-        conversationIdRef.current     = id
-        loadedConversationRef.current = id  // prevent effect from re-fetching
-        router.replace(`/agents/${agentId}?c=${id}`, { scroll: false })
+        const conv = await res.json() as { id: string; created_at: string }
+        conversationIdRef.current     = conv.id
+        loadedConversationRef.current = conv.id  // prevent effect from re-fetching
+        router.replace(`/agents/${agentId}?c=${conv.id}`, { scroll: false })
+        onConversationCreated?.(conv)
       }
     }
 
@@ -308,7 +313,9 @@ export default function ChatPanel({
 
       // Stream complete — persist the assistant reply (fire-and-forget).
       if (fullContent && conversationIdRef.current) {
-        fetch(`/api/conversations/${conversationIdRef.current}/messages`, {
+        const cid = conversationIdRef.current
+
+        fetch(`/api/conversations/${cid}/messages`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({
@@ -317,6 +324,22 @@ export default function ChatPanel({
             tool_calls: toolsUsed.length > 0 ? toolsUsed : null,
           }),
         }).catch(console.error)
+
+        // Auto-title — only on the first exchange (nextMessages had just the
+        // one user message before this reply). Fire-and-forget; errors are
+        // logged but never surfaced to the user.
+        if (nextMessages.length === 1) {
+          fetch(`/api/conversations/${cid}/title`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ userMessage: text, assistantMessage: fullContent }),
+          })
+            .then(res => res.ok ? res.json() : null)
+            .then((data: { title: string } | null) => {
+              if (data?.title) onTitleGenerated?.(cid, data.title)
+            })
+            .catch(console.error)
+        }
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
