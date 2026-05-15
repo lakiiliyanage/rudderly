@@ -7,6 +7,7 @@ export interface Agent {
   description: string
   config:      AgentConfig
   is_public:   boolean
+  slug:        string | null
   created_at:  string
   updated_at:  string
 }

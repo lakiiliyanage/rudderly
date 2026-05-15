@@ -31,7 +31,12 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (request.nextUrl.pathname.startsWith('/dashboard') && !user) {
+  const protectedPaths = ['/dashboard', '/agents', '/profile']
+  const isProtected = protectedPaths.some(p =>
+    request.nextUrl.pathname.startsWith(p)
+  )
+
+  if (isProtected && !user) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/auth/login'
     return NextResponse.redirect(loginUrl)

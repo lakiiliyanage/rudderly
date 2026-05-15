@@ -13,6 +13,7 @@ import Link from 'next/link'
 import DeleteButton from './DeleteButton'
 import AgentChatLayout from './AgentChatLayout'
 import CreatedBanner from './CreatedBanner'
+import ShareDialog from '@/components/ShareDialog'
 import { Badge } from '@/components/ui/badge'
 import type { AgentConfig } from '@/lib/types/agent'
 
@@ -32,7 +33,7 @@ export default async function AgentPage({ params, searchParams }: AgentPageProps
 
   const { data: agent } = await supabase
     .from('agents')
-    .select('id, name, description, config, created_at')
+    .select('id, name, description, config, is_public, slug, created_at')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -105,8 +106,13 @@ export default async function AgentPage({ params, searchParams }: AgentPageProps
           </div>
         </div>
 
-        {/* Edit + Delete */}
+        {/* Share + Edit + Delete */}
         <div className="flex items-center gap-2 shrink-0">
+          <ShareDialog
+            agentId={id}
+            initialIsPublic={agent.is_public ?? false}
+            initialSlug={agent.slug ?? null}
+          />
           <Link
             href={`/agents/${id}/edit`}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3.5 py-2 rounded-lg transition-all active:scale-95"
