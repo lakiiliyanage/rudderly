@@ -1,5 +1,5 @@
-import slugify from 'slugify'
 import { createClient } from '@/lib/supabase/server'
+import { generateBaseSlug, addUniqueSuffix } from '@/lib/slug'
 import { NextResponse } from 'next/server'
 
 type Params = { params: Promise<{ id: string }> }
@@ -50,7 +50,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     // Only generate a slug the first time the agent is made public.
     if (isPublic && !slug) {
-      let candidate = slugify(agent.name ?? 'agent', { lower: true, strict: true })
+      let candidate = generateBaseSlug(agent.name ?? 'agent')
 
       const { data: conflict } = await supabase
         .from('agents')
@@ -59,7 +59,7 @@ export async function PATCH(request: Request, { params }: Params) {
         .single()
 
       if (conflict) {
-        candidate = candidate + '-' + Math.random().toString(16).slice(2, 6)
+        candidate = addUniqueSuffix(candidate)
       }
 
       slug = candidate

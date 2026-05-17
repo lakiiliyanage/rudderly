@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
@@ -5,8 +6,47 @@ import ShareChatPanel from './ShareChatPanel'
 import CloneButton from './CloneButton'
 import type { AgentConfig } from '@/lib/types/agent'
 
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://agentforge.vercel.app'
+
 interface SharePageProps {
   params: Promise<{ slug: string }>
+}
+
+export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
+  const { slug } = await params
+  const supabase  = await createClient()
+
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('name, description, slug')
+    .eq('slug', slug)
+    .eq('is_public', true)
+    .single()
+
+  if (!agent) {
+    return { title: 'Agent not found | AgentForge' }
+  }
+
+  const title       = `${agent.name} | AgentForge`
+  const ogTitle     = `${agent.name} — AI Agent on AgentForge`
+  const description = agent.description || 'Chat with this AI agent on AgentForge'
+  const ogDesc      = agent.description || 'Try this AI agent built with AgentForge'
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title:       ogTitle,
+      description: ogDesc,
+      type:        'website',
+      url:         `${BASE_URL}/share/${agent.slug}`,
+    },
+    twitter: {
+      card:        'summary',
+      title:       ogTitle,
+      description: ogDesc,
+    },
+  }
 }
 
 export default async function SharePage({ params }: SharePageProps) {
@@ -16,7 +56,7 @@ export default async function SharePage({ params }: SharePageProps) {
   // RLS allows anonymous reads of public agents.
   const { data: agent } = await supabase
     .from('agents')
-    .select('id, name, description, config')
+    .select('id, name, description, config, public_views')
     .eq('slug', slug)
     .eq('is_public', true)
     .single()
@@ -77,6 +117,11 @@ export default async function SharePage({ params }: SharePageProps) {
           <h1 className="text-2xl font-bold text-white">{agent.name ?? 'Untitled Agent'}</h1>
           {agent.description && (
             <p className="text-gray-400 text-sm mt-1 max-w-xl">{agent.description}</p>
+          )}
+          {(agent.public_views ?? 0) > 0 && (
+            <p className="text-gray-500 text-xs mt-1">
+              {(agent.public_views as number).toLocaleString()} conversations started
+            </p>
           )}
           <div className="flex flex-wrap gap-1.5 mt-3">
             {capBadges.length > 0 ? capBadges.map(b => (

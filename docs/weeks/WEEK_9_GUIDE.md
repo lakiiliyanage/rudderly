@@ -735,9 +735,9 @@ Ask Claude Code:
 
 ---
 
-### Stretch 3 — Vercel Analytics + View Counter (30 min)
+### Stretch 3 — View Counter (30 min)
 
-Track how many times each public agent's share page is viewed.
+Track how many times each public agent's share page is viewed. This is fully testable on localhost — no deployment needed.
 
 Ask Claude Code:
 > *"Add a simple view counter to public agent pages.*
@@ -760,9 +760,7 @@ Ask Claude Code:
 > - *Failure path (counter error): if the SQL update fails, the chat route continues without error — the counter is not critical*
 > *Do not mark complete until both pass."*
 
-Also enable Vercel Analytics:
-1. In your Vercel dashboard, go to your project → Analytics tab → Enable Analytics (free tier)
-2. Ask Claude Code: *"Install `@vercel/analytics` and add the `<Analytics />` component to `src/app/layout.tsx` so page views are tracked across the whole site."*
+⏸️ **Vercel Analytics — defer to Week 11.** The `@vercel/analytics` package sends data to Vercel's servers and does nothing on localhost — the dashboard will show zero data until the app is deployed. This is a two-step job once you're on Vercel: enable Analytics in the dashboard (one click) + add `<Analytics />` to `layout.tsx` (one line). Add it then, not now.
 
 ---
 
@@ -790,13 +788,131 @@ Ask Claude Code:
 > - *Verify `.env.example` does not contain any real API keys — only placeholder strings*
 > *Do not mark complete until both pass."*
 
+### Stretch 5 — Automated Testing Framework (1.5 hrs)
+
+Three layers of testing that all run from the terminal. Each layer covers a different part of the stack — API routes, pure functions, and browser UI. If any layer already exists from earlier weeks, ask Claude Code to validate it still passes before extending it.
+
+| Layer | Tool | What it tests | Command |
+|---|---|---|---|
+| 1 | test-routes.ts (already installed) | API routes — HTTP status codes, auth, data integrity | `npx tsx src/lib/tools/test-routes.ts` |
+| 2 | Vitest | Pure functions — context window logic, slug generation | `npx vitest run` |
+| 3 | Playwright | Browser UI — URL params, sidebar, share page in incognito | `npx playwright test` |
+
+---
+
+#### Layer 1 — Extend API Route Tests (~20 min)
+
+You already have `src/lib/tools/test-routes.ts` from Step 3, covering the conversations and messages API routes. Ask Claude Code to extend it:
+
+> *"Extend `src/lib/tools/test-routes.ts` to add Week 9 coverage for the routes built after Step 3. Add tests for:*
+> - *POST /api/agents/[id]/share with `{ isPublic: true }` → 200 (OK — request succeeded) + slug returned*
+> - *POST /api/agents/[id]/share with `{ isPublic: false }` → 200 + is_public is false in response*
+> - *POST /api/agents/clone with a valid public agent ID → 201 (Created — new resource created) + agentId returned*
+> - *POST /api/agents/clone with a private agent ID → 403 (Forbidden — logged in but not allowed to clone a private agent)*
+> - *POST /api/conversations/[id]/title with { userMessage, assistantMessage } → 200 + title string returned*
+> - *Check Supabase messages table after a public chat exchange via /api/share/[agentId]/chat → row count for that agentId should be 0 (public chat is not persisted)*
+>
+> *Use the existing service role client pattern. Run all tests including the original ones — do not remove any. Print 'X passed, Y failed' at the end.*
+>
+> *After building, verify by testing:*
+> - *Happy path: `set -a && source .env.local && set +a && npx tsx src/lib/tools/test-routes.ts` → all tests pass*
+> - *Failure path: temporarily break one route (e.g. comment out auth check) → that test fails with clear output, others still pass*
+> *Do not mark complete until both pass."*
+
+---
+
+#### Layer 2 — Vitest for Pure Functions (~30 min)
+
+Vitest is a TypeScript-native test runner — it runs your functions directly in Node.js (the JavaScript runtime) without a browser, checks the outputs match what you expect, and reports pass/fail in under a second. Perfect for testing logic that doesn't need the network or a UI.
+
+Install it once:
+```bash
+npm install -D vitest
+```
+
+Ask Claude Code:
+> *"Install Vitest (`npm install -D vitest`) and add a `test` script to `package.json`: `\"test\": \"vitest run\"`. Then create `src/lib/__tests__/context.test.ts` to test the `prepareMessagesForContext` function from `src/lib/context.ts`.*
+>
+> *Write tests for:*
+> - *Under 40 messages → function returns the array unchanged, same length*
+> - *Exactly 40 messages → function returns unchanged (boundary — the exact limit should not trigger truncation)*
+> - *41 messages → function returns 32 items (2 synthetic summary messages + 30 recent)*
+> - *Summarisation throws an error → function falls back to returning the 30 most recent messages with no crash*
+>
+> *Also create `src/lib/__tests__/slug.test.ts` to test slug generation from the share route: 'My Research Agent' → 'my-research-agent', two agents with identical names → different slugs (second has a unique suffix).*
+>
+> *After building, verify by testing:*
+> - *Happy path: `npx vitest run` → all tests pass with green output*
+> - *Failure path: change the maxMessages value in one test to an intentionally wrong number → that test fails with a clear diff showing expected vs. received*
+> *Do not mark complete until both pass."*
+
+Run tests any time with:
+```bash
+npx vitest run
+```
+
+---
+
+#### Layer 3 — Playwright for Browser/UI Tests (~40 min)
+
+Playwright is an end-to-end (E2E) testing library — it opens a real browser (Chromium by default), navigates pages, clicks elements, reads the DOM (the live HTML tree of the page), and asserts what it finds. This is what can validate the UI behaviours that can't be tested with a script alone: URL updating without a reload, the sidebar refreshing after a reply, the share page loading in incognito.
+
+Install it once (say yes to all prompts, choose Chromium only to keep it fast):
+```bash
+npm init playwright@latest
+```
+
+Ask Claude Code:
+> *"Set up Playwright for the AgentForge project (Next.js 16 dev server on port 3000). Create `playwright.config.ts` with: baseURL `http://localhost:3000`, use `chromium` only, `webServer` that runs `npm run dev` automatically before tests. Store test files in `e2e/`.*
+>
+> *Create `e2e/conversations.spec.ts` with these tests (each is a Playwright test — a function that drives a real browser):*
+> - *'URL updates to ?c= on first message': navigate to /agents/[testAgentId] (no query param) → type a message → send → assert URL contains ?c= after reply arrives, and the page did not fully reload (use `page.waitForURL` with a timeout)*
+> - *'History persists on reload': after sending a message and getting ?c= in URL → reload page → assert the user message text is visible in the chat*
+> - *'New conversation button clears URL': click New Conversation → assert URL no longer contains ?c=*
+>
+> *Create `e2e/share.spec.ts` with:*
+> - *'Share page loads without auth': navigate to /share/[testSlug] in a new browser context (simulates incognito — no cookies) → assert agent name heading is visible*
+> - *'Non-existent slug shows 404': navigate to /share/this-slug-does-not-exist → assert page contains 'no longer available' or equivalent 404 message*
+>
+> *Use a test agent that is already public (hardcode its slug from your Supabase data). Do not create or delete data in E2E tests — read and interact only.*
+>
+> *After building, verify by testing:*
+> - *Happy path: start dev server (`npm run dev` in one terminal) → run `npx playwright test` in another → all tests pass*
+> - *Failure path: take the dev server offline → Playwright reports tests as failed with a connection error, not a crash*
+> *Do not mark complete until both pass."*
+
+Run E2E tests any time (with the dev server already running):
+```bash
+npx playwright test
+```
+
+Or let Playwright start the server automatically:
+```bash
+npx playwright test --headed
+```
+(`--headed` means "show the browser window" — useful when debugging a failing test so you can watch what Playwright is doing.)
+
+---
+
+#### 🧪 Concept Table — Testing Layers
+
+| Concept | What it is | Design analogy |
+|---|---|---|
+| **Unit test** | Tests a single function in isolation — no network, no browser | Checking a single Figma component renders correctly in isolation |
+| **Integration test** | Tests how multiple parts work together (e.g. API route + database) | Checking a component still works after connecting it to real data |
+| **E2E test** | Tests a full user journey in a real browser | Running a usability test on the live prototype |
+| **Test runner** | The tool that finds and runs your tests and reports results | Like a Figma plugin that audits every component automatically |
+| **Assertion** | A statement that something must be true — test fails if it isn't | Like a design spec: "button must be 44px tall" — fails review if not |
+| **Headless** | Browser runs in the background with no visible window (faster) | Exporting a Figma file without opening it on screen |
+| **`--headed`** | Browser window is visible while the test runs (useful for debugging) | Watching a screen recording of a usability session |
+
 ---
 
 ## 💾 Commit Checkpoint — Stretch Tasks (if attempted)
 
 ```bash
 git add -A
-git commit -m "feat: Open Graph metadata, explore gallery, view counter, README + contributing docs"
+git commit -m "feat: Open Graph metadata, explore gallery, view counter, README + contributing docs, automated test framework (Vitest + Playwright)"
 ```
 
 ---
@@ -899,6 +1015,8 @@ Run these specific tests before closing out the week. Each should produce the re
 - [Claude API Anthropic SDK — TypeScript](https://github.com/anthropics/anthropic-sdk-typescript) — `stream()`, `Message`, `TextBlock` types
 - [react-markdown](https://www.npmjs.com/package/react-markdown) — rendering Claude's markdown responses in the chat UI (installed in Week 8)
 - [navigator.clipboard API — MDN](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText) — copying text to clipboard programmatically
+- [Vitest](https://vitest.dev/) — fast TypeScript-native test runner; works with Next.js out of the box
+- [Playwright](https://playwright.dev/) — end-to-end browser testing; `npm init playwright@latest` to scaffold
 
 ---
 

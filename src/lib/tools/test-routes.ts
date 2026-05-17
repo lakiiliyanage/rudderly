@@ -116,6 +116,7 @@ async function main() {
   console.log(`Agent ID  : ${agent.id}\n`)
 
   let conversationId: string | null = null
+  let clonedAgentId:  string | null = null
 
   // ── 1. POST /api/conversations → 201 ─────────────────────────────────
   {
@@ -188,8 +189,106 @@ async function main() {
     check(`${method} ${path} (no auth) → 401`, res.status === 401, `got ${res.status}`)
   }
 
+  // ── Week 9 ───────────────────────────────────────────────────────────
+
+  // ── 6. PATCH /api/agents/[id]/share { isPublic: true } → 200 + slug ──
+  {
+    const res  = await authedFetch(`/api/agents/${agent.id}/share`, cookie, {
+      method: 'PATCH',
+      body:   JSON.stringify({ isPublic: true }),
+    })
+    const body = await res.json()
+    const ok   = res.status === 200 && typeof body.slug === 'string' && body.slug.length > 0
+    check('PATCH /api/agents/[id]/share { isPublic: true } → 200 + slug', ok,
+      `status=${res.status} body=${JSON.stringify(body)}`)
+  }
+
+  // ── 7. POST /api/agents/clone (public agent) → 201 + agentId ─────────
+  {
+    const res  = await authedFetch('/api/agents/clone', cookie, {
+      method: 'POST',
+      body:   JSON.stringify({ sourceAgentId: agent.id }),
+    })
+    const body = await res.json()
+    const ok   = res.status === 201 && typeof body.agentId === 'string'
+    check('POST /api/agents/clone (public agent) → 201 + agentId', ok,
+      `status=${res.status} body=${JSON.stringify(body)}`)
+    if (ok) clonedAgentId = body.agentId
+  }
+
+  // ── 8. POST /api/agents/clone (private agent) → 403 ─────────────────
+  // The cloned agent is private by default (clone route sets is_public: false).
+  if (clonedAgentId) {
+    const res = await authedFetch('/api/agents/clone', cookie, {
+      method: 'POST',
+      body:   JSON.stringify({ sourceAgentId: clonedAgentId }),
+    })
+    check('POST /api/agents/clone (private agent) → 403', res.status === 403,
+      `got ${res.status}`)
+  } else {
+    check('POST /api/agents/clone (private agent) → 403', false, 'skipped — clone in test 7 failed')
+  }
+
+  // ── 9. POST /api/conversations/[id]/title → 200 + title string ───────
+  if (conversationId) {
+    const res  = await authedFetch(`/api/conversations/${conversationId}/title`, cookie, {
+      method: 'POST',
+      body:   JSON.stringify({
+        userMessage:      'What is the capital of France?',
+        assistantMessage: 'The capital of France is Paris.',
+      }),
+    })
+    const body = await res.json()
+    const ok   = res.status === 200 && typeof body.title === 'string' && body.title.length > 0
+    check('POST /api/conversations/[id]/title → 200 + title string', ok,
+      `status=${res.status} body=${JSON.stringify(body)}`)
+  } else {
+    check('POST /api/conversations/[id]/title → 200', false, 'skipped — no conversation ID')
+  }
+
+  // ── 10. Public chat → messages not persisted ─────────────────────────
+  // Agent is public (made public in test 6). Send a message via the share
+  // route — it streams but never writes to the DB. Verify zero conversations
+  // were created for this agent that are not owned by our test user.
+  {
+    const chatRes = await fetch(`${BASE_URL}/api/share/${agent.id}/chat`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        messages: [{ role: 'user', content: 'Reply with just the word "ok".' }],
+      }),
+    })
+    await chatRes.text() // drain the SSE stream
+
+    // admin bypasses RLS — count conversations for this agent not owned by the test user
+    const { count } = await admin
+      .from('conversations')
+      .select('id', { count: 'exact', head: true })
+      .eq('agent_id', agent.id)
+      .neq('user_id', user.id)
+
+    check(
+      'POST /api/share/[agentId]/chat — public chat not persisted (0 rows in messages for public session)',
+      (count ?? 0) === 0,
+      `found ${count ?? 'null'} public-owned conversations for this agent`
+    )
+  }
+
+  // ── 11. PATCH /api/agents/[id]/share { isPublic: false } → 200 ───────
+  {
+    const res  = await authedFetch(`/api/agents/${agent.id}/share`, cookie, {
+      method: 'PATCH',
+      body:   JSON.stringify({ isPublic: false }),
+    })
+    const body = await res.json()
+    const ok   = res.status === 200 && body.is_public === false
+    check('PATCH /api/agents/[id]/share { isPublic: false } → 200 + is_public false', ok,
+      `status=${res.status} body=${JSON.stringify(body)}`)
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────────────
   console.log('\nCleaning up...')
+  if (clonedAgentId)  await admin.from('agents').delete().eq('id', clonedAgentId)
   if (conversationId) await admin.from('conversations').delete().eq('id', conversationId)
   await admin.from('agents').delete().eq('id', agent.id)
   await admin.auth.admin.deleteUser(user.id)

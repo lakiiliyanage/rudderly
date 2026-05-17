@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
@@ -48,6 +49,13 @@ export async function POST(
         { error: 'Forbidden — this agent is private.' },
         { status: 403 }
       )
+    }
+
+    // Fire-and-forget view increment — never let analytics break the response.
+    const admin = createAdminClient()
+    if (admin) {
+      Promise.resolve(admin.rpc('increment_agent_views', { agent_id: agentId }))
+        .catch((err: unknown) => console.error('[share/chat] view increment failed:', err))
     }
 
     const body = await request.json()

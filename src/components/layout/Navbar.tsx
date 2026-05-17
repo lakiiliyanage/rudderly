@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 
 const navLinks = [
-  { label: "Home", href: "/" },
+  { label: "Home",      href: "/" },
+  { label: "Explore",   href: "/explore" },
   { label: "Dashboard", href: "/dashboard" },
 ]
 

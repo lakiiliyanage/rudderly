@@ -1,23 +1,37 @@
 # AgentForge
 
-AgentForge is an open-source, no-code AI agent builder for non-developers. Instead of writing prompts in a terminal or wrestling with APIs, you configure and deploy AI agents through a visual interface — give your agent a name, a personality, and a set of tools, and it gets a shareable public link anyone can use. Built for designers, marketers, founders, and anyone who wants to build with AI without needing to write code.
+**AgentForge — Build, share, and clone AI agents without writing code**
+
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+
+> Live Demo: _coming in Week 11 — Vercel URL here_
+
+---
+
+## Features
+
+- **Visual 5-step builder** — name, personality, tools, documents, and publish in one flow; no code required
+- **Tool integrations** — web search (Tavily), calculator, word counter, and Google Drive document reader built in
+- **Conversation history** — every chat is persisted; pick up any previous conversation from the sidebar
+- **Public sharing and cloning** — publish an agent to a shareable URL; visitors can clone it to their own account with one click
+- **View counter** — public agent pages show how many conversations have been started
+- **Open source** — MIT licensed; fork it, extend it, self-host it
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 15 (App Router) + TypeScript |
-| Styling | Tailwind CSS |
+|---|---|
+| Framework | Next.js 16 (App Router) + TypeScript |
+| Styling | Tailwind CSS v4 |
 | Database + Auth | Supabase |
-| AI | Anthropic Claude API |
-| Payments | Stripe |
+| AI | Claude API (Anthropic) |
 | Deployment | Vercel |
 
 ---
 
-## Getting Started
+## Quick Start
 
 **Prerequisites:** Node.js v20+, a Supabase project, an Anthropic API key.
 
@@ -30,8 +44,8 @@ cd agentforge
 npm install
 
 # Set up environment variables
-cp .env.local.example .env.local
-# Open .env.local and add your Supabase and Anthropic keys
+cp .env.example .env.local
+# Open .env.local and fill in your keys (see .env.example for required variables)
 
 # Start the development server
 npm run dev
@@ -44,13 +58,14 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Routes
 
 | Route | Description |
-|-------|-------------|
+|---|---|
 | `/` | Landing page |
-| `/dashboard` | Overview of your agents and activity |
-| `/agents/new` | Create and configure a new agent |
-| `/agents/[id]` | View, edit, and share a specific agent |
-| `/auth/login` | Sign in to your account |
-| `/auth/signup` | Create a new account |
+| `/dashboard` | Your agents and activity |
+| `/agents/new` | Visual agent builder |
+| `/agents/[id]` | View, edit, and share an agent |
+| `/share/[slug]` | Public agent page (no login required) |
+| `/auth/login` | Sign in |
+| `/auth/signup` | Create an account |
 
 ---
 
@@ -58,43 +73,40 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 src/
-├── app/                  # Routes (Next.js App Router)
-│   ├── page.tsx          # Landing page
-│   ├── dashboard/
+├── app/                    # Routes (Next.js App Router)
+│   ├── api/                # API routes (chat, agents, share, clone)
 │   ├── agents/
-│   │   ├── new/
-│   │   └── [id]/
+│   │   ├── new/            # 5-step visual builder
+│   │   └── [id]/           # Agent detail + edit
+│   ├── dashboard/
+│   ├── share/[slug]/       # Public share page
 │   └── auth/
-│       ├── login/
-│       └── signup/
-└── components/
-    ├── ui/               # Reusable UI elements — buttons, cards, inputs
-    └── layout/           # Page-level layout — nav, sidebar, footer
+├── components/
+│   ├── ui/                 # shadcn/ui primitives
+│   └── layout/             # Navbar, sidebar
+└── lib/
+    ├── supabase/           # Server + client + admin helpers
+    ├── tools/              # Tool definitions and runner
+    └── types/              # Shared TypeScript types
 ```
-
----
-
-## Roadmap
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| 1 — Foundation | Environment setup, Next.js scaffold, Git workflow | ✅ Complete |
-| 2 — Frontend | JavaScript, React, Tailwind fundamentals | ✅ Complete |
-| 3 — Structure | App routing, component architecture, landing page | 🔄 In progress |
-| 4 — Backend | Supabase database, authentication, row-level security | Upcoming |
-| 5 — AI | Claude API integration, agent configuration, tool use | Upcoming |
-| 6 — Product | Visual agent builder UI, shareable links, templates | Upcoming |
-| 7 — Launch | Stripe subscriptions, Vercel deployment, public beta | Upcoming |
 
 ---
 
 ## Contributing
 
-AgentForge is open source under the MIT licence. Issues and pull requests are welcome.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to fork, run locally, and open a pull request.
 
 ---
 
-## About
+## Changelog
 
-Built by [Lakii](https://github.com/lakiiliyanage) — UX designer learning to build in public.  
+See [CHANGELOG.md](CHANGELOG.md) for a history of releases.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+Built by [Lakii](https://github.com/lakiiliyanage) — UX designer learning to build in public.
 Timeline: April 2026 → July 2026
