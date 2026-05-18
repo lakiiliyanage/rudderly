@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const FREE_LIMITS = { messages: 100,      agents: 3        }
-const PRO_LIMITS  = { messages: Infinity, agents: Infinity }
+const PRO_LIMITS  = { messages: 5000, agents: 25 }
 
 export async function getUserUsage(userId: string) {
   const admin = createAdminClient()

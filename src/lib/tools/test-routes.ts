@@ -355,9 +355,9 @@ async function main() {
     const body = await res.json()
     const ok   = res.status === 200
       && body.tier === 'pro'
-      && body.monthlyLimit === null
-      && body.agentLimit === null
-    check('GET /api/subscription (pro user) → 200 with null limits', ok,
+      && body.monthlyLimit === 5000
+      && body.agentLimit === 25
+    check('GET /api/subscription (pro user) → 200 with pro limits (5000/25)', ok,
       `status=${res.status} body=${JSON.stringify(body)}`)
 
     await admin.from('subscriptions').update({ tier: 'free' }).eq('user_id', user.id)
@@ -455,13 +455,13 @@ async function main() {
     })
     const body = await res.json()
     check(
-      'POST /api/chat (message_count=100, at limit) → 402 MESSAGE_LIMIT_REACHED',
-      res.status === 402 && body.error === 'MESSAGE_LIMIT_REACHED',
+      'POST /api/chat (free, message_count=100) → 402 + cta=upgrade',
+      res.status === 402 && body.error === 'MESSAGE_LIMIT_REACHED' && body.cta === 'upgrade' && body.tier === 'free',
       `status=${res.status} body=${JSON.stringify(body)}`
     )
   }
 
-  // ── 22. Pro tier bypasses message limit → 200 ─────────────────────────
+  // ── 22. Pro tier at 200 messages → 200 (well under 5000 limit) ──────────
   {
     await admin.from('subscriptions').update({ tier: 'pro' }).eq('user_id', user.id)
     const period = new Date().toISOString().slice(0, 7)
@@ -475,7 +475,30 @@ async function main() {
       }),
     })
     await res.text()
-    check('POST /api/chat (pro, message_count=200) → 200 (no limit)', res.status === 200, `got ${res.status}`)
+    check('POST /api/chat (pro, message_count=200, under 5000) → 200', res.status === 200, `got ${res.status}`)
+
+    await admin.from('subscriptions').update({ tier: 'free' }).eq('user_id', user.id)
+  }
+
+  // ── 22b. Pro tier at 5000 messages → 402 + cta=enterprise ────────────
+  {
+    await admin.from('subscriptions').update({ tier: 'pro' }).eq('user_id', user.id)
+    const period = new Date().toISOString().slice(0, 7)
+    await admin.from('usage').upsert({ user_id: user.id, period, message_count: 5000 }, { onConflict: 'user_id,period' })
+
+    const res  = await authedFetch('/api/chat', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        messages: [{ role: 'user', content: 'Should be blocked.' }],
+      }),
+    })
+    const body = await res.json()
+    check(
+      'POST /api/chat (pro, message_count=5000) → 402 + cta=enterprise',
+      res.status === 402 && body.error === 'MESSAGE_LIMIT_REACHED' && body.cta === 'enterprise' && body.tier === 'pro',
+      `status=${res.status} body=${JSON.stringify(body)}`
+    )
 
     await admin.from('subscriptions').update({ tier: 'free' }).eq('user_id', user.id)
   }
@@ -499,8 +522,8 @@ async function main() {
     })
     const body = await res.json()
     check(
-      'POST /api/agents (3 agents exist) → 402 AGENT_LIMIT_REACHED',
-      res.status === 402 && body.error === 'AGENT_LIMIT_REACHED',
+      'POST /api/agents (free, 3 agents) → 402 + cta=upgrade',
+      res.status === 402 && body.error === 'AGENT_LIMIT_REACHED' && body.cta === 'upgrade' && body.tier === 'free',
       `status=${res.status} body=${JSON.stringify(body)}`
     )
 

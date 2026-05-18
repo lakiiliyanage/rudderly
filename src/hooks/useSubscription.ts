@@ -5,9 +5,9 @@ import { useEffect, useState } from 'react'
 export type SubscriptionData = {
   tier: 'free' | 'pro'
   messageCount: number
-  monthlyLimit: number | null
+  monthlyLimit: number
   agentCount: number
-  agentLimit: number | null
+  agentLimit: number
 }
 
 type UseSubscriptionResult = SubscriptionData & {
@@ -34,9 +34,9 @@ export function useSubscription(): UseSubscriptionResult {
   return {
     tier:         data?.tier         ?? 'free',
     messageCount: data?.messageCount ?? 0,
-    monthlyLimit: data?.monthlyLimit ?? null,
+    monthlyLimit: data?.monthlyLimit ?? 0,
     agentCount:   data?.agentCount   ?? 0,
-    agentLimit:   data?.agentLimit   ?? null,
+    agentLimit:   data?.agentLimit   ?? 0,
     isLoading,
     error,
   }

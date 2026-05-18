@@ -36,9 +36,14 @@ export async function POST(request: Request) {
     // ── Agent limit check ───────────────────────────────────────────
     const usage = await getUserUsage(user.id)
     if (usage.agentCount >= usage.agentLimit) {
+      const { tier } = usage
       return NextResponse.json({
         error:   'AGENT_LIMIT_REACHED',
-        message: 'Free plan allows 3 agents. Upgrade to Pro for unlimited agents.',
+        tier,
+        message: tier === 'pro'
+          ? `You've reached the 25-agent limit on Pro. Contact us to upgrade.`
+          : `Free plan allows 3 agents. Upgrade to Pro for up to 25.`,
+        cta: tier === 'pro' ? 'enterprise' : 'upgrade',
       }, { status: 402 })
     }
 

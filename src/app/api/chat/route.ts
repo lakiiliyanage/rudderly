@@ -44,10 +44,14 @@ export async function POST(request: Request) {
     // ── Usage limit check ─────────────────────────────────────────────────
     const usage = await getUserUsage(user.id)
     if (usage.messageCount >= usage.monthlyLimit) {
+      const { tier, monthlyLimit } = usage
       return NextResponse.json({
-        error:      'MESSAGE_LIMIT_REACHED',
-        message:    `You've used all ${usage.monthlyLimit} messages for this month.`,
-        upgradeUrl: '/dashboard',
+        error:   'MESSAGE_LIMIT_REACHED',
+        tier,
+        message: tier === 'pro'
+          ? `You've used all ${monthlyLimit.toLocaleString()} Pro messages this month.`
+          : `You've used all ${monthlyLimit} messages this month.`,
+        cta: tier === 'pro' ? 'enterprise' : 'upgrade',
       }, { status: 402 })
     }
 

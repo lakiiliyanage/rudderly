@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useSubscription } from '@/hooks/useSubscription'
 
 function SubscriptionBarInner() {
-  const router = useRouter()
+  const router       = useRouter()
   const searchParams = useSearchParams()
   const { tier, messageCount, monthlyLimit, agentCount, agentLimit, isLoading } = useSubscription()
-  const [toast, setToast]     = useState<string | null>(null)
+  const [toast,     setToast]     = useState<string | null>(null)
   const [upgrading, setUpgrading] = useState(false)
 
   // Show success toast when redirected back from Stripe with ?upgraded=true
@@ -39,14 +39,18 @@ function SubscriptionBarInner() {
     }
   }
 
-  const messagePercent = monthlyLimit ? Math.min((messageCount / monthlyLimit) * 100, 100) : 0
-  const agentPercent   = agentLimit   ? Math.min((agentCount   / agentLimit)   * 100, 100) : 0
+  const messagePercent = monthlyLimit > 0 ? Math.min((messageCount / monthlyLimit) * 100, 100) : 0
+  const agentPercent   = agentLimit   > 0 ? Math.min((agentCount   / agentLimit)   * 100, 100) : 0
+
+  const planLabel     = tier === 'pro' ? 'Pro plan' : 'Free plan'
+  const msgLimitLabel = monthlyLimit.toLocaleString()
+  const msgCountLabel = messageCount.toLocaleString()
 
   return (
     <>
       {/* ── Toast ── */}
       {toast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg flex items-center gap-3">
           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
@@ -63,28 +67,31 @@ function SubscriptionBarInner() {
       <div className="bg-gray-900/60 border border-gray-800/60 rounded-xl px-5 py-3.5 mb-8 flex items-center justify-between gap-4 flex-wrap">
         {isLoading ? (
           <div className="h-4 w-64 bg-gray-800 rounded animate-pulse" />
-        ) : tier === 'pro' ? (
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex items-center gap-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 text-xs font-semibold px-2.5 py-1 rounded-full">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-              Pro plan
-            </span>
-            <span className="text-sm text-gray-400">Unlimited messages and agents</span>
-          </div>
         ) : (
           <div className="flex items-center gap-6 flex-1 min-w-0">
-            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Free plan</span>
+            {/* Plan badge */}
+            {tier === 'pro' ? (
+              <span className="inline-flex items-center gap-1.5 bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 text-xs font-semibold px-2.5 py-1 rounded-full shrink-0">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                {planLabel}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-500 font-medium whitespace-nowrap shrink-0">{planLabel}</span>
+            )}
 
             {/* Messages usage */}
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs text-gray-400 whitespace-nowrap">
-                {messageCount} / {monthlyLimit} messages
+                {msgCountLabel} / {msgLimitLabel} messages
               </span>
               <div className="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${messagePercent >= 90 ? 'bg-rose-500' : messagePercent >= 70 ? 'bg-amber-500' : 'bg-violet-500'}`}
+                  className={`h-full rounded-full transition-all ${
+                    messagePercent >= 90 ? 'bg-rose-500' :
+                    messagePercent >= 70 ? 'bg-amber-500' : 'bg-violet-500'
+                  }`}
                   style={{ width: `${messagePercent}%` }}
                 />
               </div>
@@ -97,7 +104,10 @@ function SubscriptionBarInner() {
               </span>
               <div className="w-16 h-1.5 bg-gray-800 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${agentPercent >= 100 ? 'bg-rose-500' : agentPercent >= 67 ? 'bg-amber-500' : 'bg-violet-500'}`}
+                  className={`h-full rounded-full transition-all ${
+                    agentPercent >= 100 ? 'bg-rose-500' :
+                    agentPercent >= 67  ? 'bg-amber-500' : 'bg-violet-500'
+                  }`}
                   style={{ width: `${agentPercent}%` }}
                 />
               </div>
@@ -105,7 +115,8 @@ function SubscriptionBarInner() {
           </div>
         )}
 
-        {tier === 'free' && (
+        {/* Right-side CTA */}
+        {!isLoading && tier === 'free' && (
           <button
             onClick={handleUpgrade}
             disabled={upgrading}
@@ -113,6 +124,15 @@ function SubscriptionBarInner() {
           >
             {upgrading ? 'Redirecting…' : 'Upgrade to Pro →'}
           </button>
+        )}
+
+        {!isLoading && tier === 'pro' && (
+          <a
+            href="mailto:liyanage.lakii@gmail.com?subject=AgentForge Enterprise Enquiry"
+            className="shrink-0 text-xs text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap"
+          >
+            Contact Enterprise →
+          </a>
         )}
       </div>
     </>
