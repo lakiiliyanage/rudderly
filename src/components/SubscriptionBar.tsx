@@ -10,6 +10,7 @@ function SubscriptionBarInner() {
   const { tier, messageCount, monthlyLimit, agentCount, agentLimit, isLoading } = useSubscription()
   const [toast,     setToast]     = useState<string | null>(null)
   const [upgrading, setUpgrading] = useState(false)
+  const [managing,  setManaging]  = useState(false)
 
   // Show success toast when redirected back from Stripe with ?upgraded=true
   useEffect(() => {
@@ -127,12 +128,24 @@ function SubscriptionBarInner() {
         )}
 
         {!isLoading && tier === 'pro' && (
-          <a
-            href="mailto:liyanage.lakii@gmail.com?subject=AgentForge Enterprise Enquiry"
-            className="shrink-0 text-xs text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap"
+          <button
+            onClick={async () => {
+              setManaging(true)
+              try {
+                const res  = await fetch('/api/stripe/portal', { method: 'POST' })
+                const body = await res.json() as { url?: string; error?: string }
+                if (!res.ok || !body.url) throw new Error(body.error ?? 'Portal unavailable')
+                window.location.href = body.url
+              } catch (err) {
+                console.error(err)
+                setManaging(false)
+              }
+            }}
+            disabled={managing}
+            className="shrink-0 text-xs font-medium text-gray-400 hover:text-gray-200 border border-gray-700/60 hover:border-gray-600 bg-gray-800/40 hover:bg-gray-800/70 px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
-            Contact Enterprise →
-          </a>
+            {managing ? 'Opening…' : 'Manage subscription →'}
+          </button>
         )}
       </div>
     </>

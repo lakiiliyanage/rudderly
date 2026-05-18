@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
+import { publicChatRatelimit } from '@/lib/ratelimit'
+import { sanitizeUserMessage } from '@/lib/sanitize'
 import {
   dateTimeTool,
   webSearchTool,
@@ -31,6 +33,25 @@ export async function POST(
 ) {
   try {
     const { agentId } = await params
+
+    // ── IP-based rate limit ───────────────────────────────────────────
+    // Public route has no user ID — key by IP to prevent anonymous abuse.
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+           ?? request.headers.get('x-real-ip')
+           ?? 'unknown'
+    const { success, remaining, reset } = await publicChatRatelimit.limit(ip)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please wait a moment.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After':           String(Math.ceil((reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(remaining),
+          },
+        }
+      )
+    }
 
     // Public route — no auth required. Verify the agent exists and is public.
     const supabase = await createClient()
@@ -66,6 +87,17 @@ export async function POST(
         { error: 'Request body must include a messages array.' },
         { status: 400 }
       )
+    }
+
+    // ── Sanitize last user message ────────────────────────────────────
+    // Public route — anonymous users send this; prompt injection is a real risk.
+    const lastMsg = messages.at(-1)
+    if (lastMsg?.role === 'user' && typeof lastMsg.content === 'string') {
+      const result = sanitizeUserMessage(lastMsg.content)
+      if (!result.safe) {
+        return NextResponse.json({ error: result.reason }, { status: 400 })
+      }
+      messages[messages.length - 1] = { ...lastMsg, content: result.sanitized }
     }
 
     // ── Tools ─────────────────────────────────────────────────────────────

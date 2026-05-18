@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+// SECURITY: accepted risk — no rate limit. Writes are ownership-gated (conversation
+// ownership verified before insert); messages are persisted but do not invoke Claude.
 type Params = { params: Promise<{ id: string }> }
 
 export async function POST(request: Request, { params }: Params) {
@@ -23,6 +25,21 @@ export async function POST(request: Request, { params }: Params) {
     if (!role || !content) {
       return NextResponse.json(
         { error: 'Bad request — role and content are required.' },
+        { status: 400 }
+      )
+    }
+
+    const ALLOWED_ROLES = ['user', 'assistant', 'system'] as const
+    if (!ALLOWED_ROLES.includes(role)) {
+      return NextResponse.json(
+        { error: 'Bad request — role must be user, assistant, or system.' },
+        { status: 400 }
+      )
+    }
+
+    if (typeof content !== 'string' || content.length > 50_000) {
+      return NextResponse.json(
+        { error: 'Bad request — content must be a string under 50,000 characters.' },
         { status: 400 }
       )
     }

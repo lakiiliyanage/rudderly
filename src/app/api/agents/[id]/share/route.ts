@@ -61,6 +61,13 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = await request.json()
     const { isPublic } = body as { isPublic: boolean }
 
+    if (typeof isPublic !== 'boolean') {
+      return NextResponse.json(
+        { error: 'Bad request — isPublic must be a boolean.' },
+        { status: 400 }
+      )
+    }
+
     let slug: string | null = agent.slug
 
     // Only generate a slug the first time the agent is made public.

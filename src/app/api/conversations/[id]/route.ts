@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
+// SECURITY: accepted risk — no rate limit. All three handlers are ownership-gated
+// (user can only read/modify their own conversations); blast radius is self-contained.
 type Params = { params: Promise<{ id: string }> }
 
 export async function GET(_request: Request, { params }: Params) {
@@ -78,6 +80,13 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!title) {
       return NextResponse.json(
         { error: 'Bad request — title is required.' },
+        { status: 400 }
+      )
+    }
+
+    if (typeof title !== 'string' || title.length > 200) {
+      return NextResponse.json(
+        { error: 'Bad request — title must be a string under 200 characters.' },
         { status: 400 }
       )
     }

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
+import { getUserUsage } from '@/lib/usage'
+import { chatRatelimit } from '@/lib/ratelimit'
 import {
   dateTimeTool,
   webSearchTool,
@@ -35,6 +37,35 @@ export async function POST(request: Request) {
         { error: 'Unauthorised — please sign in.' },
         { status: 401 }
       )
+    }
+
+    // ── Rate limit check ──────────────────────────────────────────────
+    const { success, remaining, reset } = await chatRatelimit.limit(user.id)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please wait a moment.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After':           String(Math.ceil((reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(remaining),
+          },
+        }
+      )
+    }
+
+    // ── Usage limit check ─────────────────────────────────────────────
+    const usage = await getUserUsage(user.id)
+    if (usage.messageCount >= usage.monthlyLimit) {
+      const { tier, monthlyLimit } = usage
+      return NextResponse.json({
+        error:   'MESSAGE_LIMIT_REACHED',
+        tier,
+        message: tier === 'pro'
+          ? `You've used all ${monthlyLimit.toLocaleString()} Pro messages this month.`
+          : `You've used all ${monthlyLimit} messages this month.`,
+        cta: tier === 'pro' ? 'enterprise' : 'upgrade',
+      }, { status: 402 })
     }
 
     // ── Body ──────────────────────────────────────────────────────────

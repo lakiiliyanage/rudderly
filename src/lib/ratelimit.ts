@@ -22,3 +22,11 @@ export const apiRatelimit = new Ratelimit({
   analytics: true,
   prefix:    'ratelimit:api',
 })
+
+// Public (IP-keyed): 10 requests per minute per IP. Used on unauthenticated routes that call Claude API.
+export const publicChatRatelimit = new Ratelimit({
+  redis,
+  limiter:   Ratelimit.slidingWindow(10, '1 m'),
+  analytics: true,
+  prefix:    'ratelimit:public-chat',
+})

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
+import { apiRatelimit } from '@/lib/ratelimit'
 
 export async function GET(request: Request) {
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -8,6 +9,21 @@ export async function GET(request: Request) {
 
   if (!user) {
     return Response.json({ error: 'Unauthorised — please sign in.' }, { status: 401 })
+  }
+
+  // ── Rate limit ────────────────────────────────────────────────────────────
+  const { success, remaining, reset } = await apiRatelimit.limit(user.id)
+  if (!success) {
+    return Response.json(
+      { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please wait a moment.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After':           String(Math.ceil((reset - Date.now()) / 1000)),
+          'X-RateLimit-Remaining': String(remaining),
+        },
+      }
+    )
   }
 
   // ── Input validation ──────────────────────────────────────────────────────

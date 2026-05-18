@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { getUserUsage } from '@/lib/usage'
 
+// SECURITY: accepted risk — no rate limit. Read-only endpoint that returns only the
+// caller's own usage stats; no cross-user data access is possible.
 export async function GET() {
   try {
     const supabase = await createClient()

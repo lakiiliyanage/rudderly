@@ -4,6 +4,8 @@ import { stripe } from '@/lib/stripe'
 import { env } from '@/lib/env'
 import { NextResponse } from 'next/server'
 
+// SECURITY: accepted risk — no route-level rate limit. Stripe deduplicates checkout
+// sessions server-side and no local state is written until the webhook confirms payment.
 export async function POST() {
   try {
     // ── Auth ────────────────────────────────────────────────────────
@@ -70,6 +72,9 @@ export async function POST() {
       success_url: `${env.NEXT_PUBLIC_APP_URL}/dashboard?upgraded=true`,
       cancel_url: `${env.NEXT_PUBLIC_APP_URL}/dashboard?cancelled=true`,
       metadata: { supabase_user_id: user.id },
+      // Propagate user ID onto the subscription so webhook handlers can identify the user
+      // from customer.subscription.* events (session metadata is not included there).
+      subscription_data: { metadata: { supabase_user_id: user.id } },
     })
 
     return NextResponse.json({ url: checkoutSession.url }, { status: 200 })

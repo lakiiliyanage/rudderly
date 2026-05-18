@@ -12,6 +12,8 @@ export const GET  = methodNotAllowed
 export const POST = methodNotAllowed
 export const PUT  = methodNotAllowed
 
+// SECURITY: accepted risk — no rate limit on PATCH/DELETE. Both operations are
+// ownership-gated (user can only affect their own agents) so blast radius is self-contained.
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

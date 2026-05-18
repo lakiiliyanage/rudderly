@@ -52,6 +52,8 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('[tools/test] error:', error)
+    // SECURITY: accepted risk — full error messages exposed in response. This route is
+    // restricted to a single admin email; detailed errors are intentional for debugging.
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unexpected error.' },
       { status: 500 }

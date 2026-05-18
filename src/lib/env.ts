@@ -48,6 +48,9 @@ const envSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z
     .string()
     .min(1, 'UPSTASH_REDIS_REST_TOKEN is missing'),
+  
+  RESEND_API_KEY: z.string().startsWith('re_', 'RESEND_API_KEY must start with re_'),  
+
 })
 
 const result = envSchema.safeParse({
@@ -63,6 +66,7 @@ const result = envSchema.safeParse({
   NEXT_PUBLIC_APP_URL:                process.env.NEXT_PUBLIC_APP_URL,
   UPSTASH_REDIS_REST_URL:             process.env.UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN:           process.env.UPSTASH_REDIS_REST_TOKEN,
+  RESEND_API_KEY:                     process.env.RESEND_API_KEY,
 })
 
 if (!result.success) {
