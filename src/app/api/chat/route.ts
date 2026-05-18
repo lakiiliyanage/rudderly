@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
 import { prepareMessagesForContext } from '@/lib/context'
+import { getUserUsage, incrementMessageCount } from '@/lib/usage'
 import {
   dateTimeTool,
   webSearchTool,
@@ -38,6 +39,16 @@ export async function POST(request: Request) {
         { error: 'Unauthorised — please sign in.' },
         { status: 401 }
       )
+    }
+
+    // ── Usage limit check ─────────────────────────────────────────────────
+    const usage = await getUserUsage(user.id)
+    if (usage.messageCount >= usage.monthlyLimit) {
+      return NextResponse.json({
+        error:      'MESSAGE_LIMIT_REACHED',
+        message:    `You've used all ${usage.monthlyLimit} messages for this month.`,
+        upgradeUrl: '/dashboard',
+      }, { status: 402 })
     }
 
     // ── Request body ─────────────────────────────────────────────────────
@@ -260,6 +271,7 @@ export async function POST(request: Request) {
           console.error('[chat] stream error:', err)
         } finally {
           abortActive = null
+          if (!cancelled) incrementMessageCount(user.id)
           controller.close()
         }
       },

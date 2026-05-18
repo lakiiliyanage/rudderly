@@ -96,6 +96,7 @@ export default function ChatPanel({
   const [interrupted,     setInterrupted]     = useState(false)
   const [isLoading,       setIsLoading]       = useState(!!searchParams.get('c'))
   const [saveToast,       setSaveToast]       = useState<string | null>(null)
+  const [limitReached,    setLimitReached]    = useState(false)
   // Tracks which assistant message indices have their Sources panel expanded.
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
   const bottomRef             = useRef<HTMLDivElement>(null)
@@ -254,7 +255,9 @@ export default function ChatPanel({
         const data = await res.json()
         setMessages(messages)
         setInput(text)
-        if (res.status === 429) {
+        if (res.status === 402 && data.error === 'MESSAGE_LIMIT_REACHED') {
+          setLimitReached(true)
+        } else if (res.status === 429) {
           setError('Too many messages — please wait a moment before sending again.')
         } else if (res.status === 500) {
           setError('Something went wrong on our end. Try again in a moment.')
@@ -539,6 +542,29 @@ export default function ChatPanel({
           </div>
         ))}
 
+        {/* ── Limit reached upgrade card ──────────────────────────────── */}
+        {limitReached && (
+          <div className="flex justify-center">
+            <div className="bg-gray-800/80 border border-violet-700/40 rounded-2xl px-5 py-4 max-w-sm text-center">
+              <div className="w-9 h-9 bg-violet-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg className="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-white mb-1">Monthly limit reached</p>
+              <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+                You&apos;ve reached your free plan limit for this month. Upgrade to Pro for unlimited messages.
+              </p>
+              <a
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-lg transition-all active:scale-95"
+              >
+                Upgrade to Pro →
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Interrupted notice */}
         {interrupted && messages.at(-1)?.role === 'assistant' && (
           <div className="flex justify-start">
@@ -576,8 +602,8 @@ export default function ChatPanel({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isWorking || isLoading}
-            placeholder={`Message ${agentName}…`}
+            disabled={isWorking || isLoading || limitReached}
+            placeholder={limitReached ? 'Upgrade to Pro to continue chatting' : `Message ${agentName}…`}
             className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50"
           />
           {isWorking ? (
@@ -594,7 +620,7 @@ export default function ChatPanel({
           ) : (
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || thinkingState !== 'idle' || isLoading}
+              disabled={!input.trim() || thinkingState !== 'idle' || isLoading || limitReached}
               className="gap-2 bg-violet-600 hover:bg-violet-500 min-w-[90px] shrink-0 active:scale-95"
             >
               Send

@@ -363,6 +363,177 @@ async function main() {
     await admin.from('subscriptions').update({ tier: 'free' }).eq('user_id', user.id)
   }
 
+  // ── Week 10: Usage tracking ───────────────────────────────────────────
+
+  // ── 18. Chat → usage row inserted / incremented ───────────────────────
+  // Send a real chat message and wait briefly for the fire-and-forget to land.
+  {
+    const chatRes = await authedFetch('/api/chat', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        messages: [{ role: 'user', content: 'Reply with just the word "ok".' }],
+      }),
+    })
+    // Drain the SSE stream fully before checking the DB.
+    await chatRes.text()
+
+    // Give the fire-and-forget a moment to write.
+    await new Promise(r => setTimeout(r, 1500))
+
+    const period = new Date().toISOString().slice(0, 7)
+    const { data: usageRow } = await admin
+      .from('usage')
+      .select('message_count')
+      .eq('user_id', user.id)
+      .eq('period', period)
+      .single()
+
+    check(
+      'POST /api/chat → usage row inserted with message_count = 1',
+      usageRow?.message_count === 1,
+      `message_count=${usageRow?.message_count ?? 'null'}`
+    )
+  }
+
+  // ── 19. Second chat message → counter increments to 2 ────────────────
+  {
+    const chatRes = await authedFetch('/api/chat', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        messages: [{ role: 'user', content: 'Say "yes".' }],
+      }),
+    })
+    await chatRes.text()
+    await new Promise(r => setTimeout(r, 1500))
+
+    const period = new Date().toISOString().slice(0, 7)
+    const { data: usageRow } = await admin
+      .from('usage')
+      .select('message_count')
+      .eq('user_id', user.id)
+      .eq('period', period)
+      .single()
+
+    check(
+      'POST /api/chat (second message) → message_count increments to 2',
+      usageRow?.message_count === 2,
+      `message_count=${usageRow?.message_count ?? 'null'}`
+    )
+  }
+
+  // ── Week 10: Limit enforcement ────────────────────────────────────────
+
+  // ── 20. Chat under message limit → 200 (streams normally) ────────────
+  {
+    const period = new Date().toISOString().slice(0, 7)
+    await admin.from('usage').upsert({ user_id: user.id, period, message_count: 50 }, { onConflict: 'user_id,period' })
+
+    const res = await authedFetch('/api/chat', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        messages: [{ role: 'user', content: 'Say "ok".' }],
+      }),
+    })
+    await res.text()
+    check('POST /api/chat (message_count=50, under limit) → 200', res.status === 200, `got ${res.status}`)
+  }
+
+  // ── 21. Chat at message limit → 402 MESSAGE_LIMIT_REACHED ────────────
+  {
+    const period = new Date().toISOString().slice(0, 7)
+    await admin.from('usage').upsert({ user_id: user.id, period, message_count: 100 }, { onConflict: 'user_id,period' })
+
+    const res  = await authedFetch('/api/chat', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        messages: [{ role: 'user', content: 'Should be blocked.' }],
+      }),
+    })
+    const body = await res.json()
+    check(
+      'POST /api/chat (message_count=100, at limit) → 402 MESSAGE_LIMIT_REACHED',
+      res.status === 402 && body.error === 'MESSAGE_LIMIT_REACHED',
+      `status=${res.status} body=${JSON.stringify(body)}`
+    )
+  }
+
+  // ── 22. Pro tier bypasses message limit → 200 ─────────────────────────
+  {
+    await admin.from('subscriptions').update({ tier: 'pro' }).eq('user_id', user.id)
+    const period = new Date().toISOString().slice(0, 7)
+    await admin.from('usage').upsert({ user_id: user.id, period, message_count: 200 }, { onConflict: 'user_id,period' })
+
+    const res = await authedFetch('/api/chat', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        messages: [{ role: 'user', content: 'Say "pro".' }],
+      }),
+    })
+    await res.text()
+    check('POST /api/chat (pro, message_count=200) → 200 (no limit)', res.status === 200, `got ${res.status}`)
+
+    await admin.from('subscriptions').update({ tier: 'free' }).eq('user_id', user.id)
+  }
+
+  // ── 23. Create agent at limit → 402 AGENT_LIMIT_REACHED ──────────────
+  {
+    // Create 2 extra agents to bring total to 3 (one already exists from setup)
+    const extras: string[] = []
+    for (let i = 0; i < 2; i++) {
+      const { data } = await admin.from('agents').insert({
+        user_id: user.id, name: `Limit Test ${i}`,
+        description: '', config: { type: 'custom', personality: { tone: 50, verbosity: 50, examplePhrases: [] }, capabilities: { webSearch: false, email: false, calendar: false, calculator: false, wordCounter: false, documents: { enabled: false, files: [] } }, limits: { maxMessageLength: 1000, avoidTopics: [] } },
+      }).select('id').single()
+      if (data) extras.push(data.id)
+    }
+
+    const res  = await authedFetch('/api/agents', cookie, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Fourth Agent', description: '', config: { type: 'custom', personality: { tone: 50, verbosity: 50, examplePhrases: [] }, capabilities: { webSearch: false, email: false, calendar: false, calculator: false, wordCounter: false, documents: { enabled: false, files: [] } }, limits: { maxMessageLength: 1000, avoidTopics: [] } } }),
+    })
+    const body = await res.json()
+    check(
+      'POST /api/agents (3 agents exist) → 402 AGENT_LIMIT_REACHED',
+      res.status === 402 && body.error === 'AGENT_LIMIT_REACHED',
+      `status=${res.status} body=${JSON.stringify(body)}`
+    )
+
+    for (const id of extras) await admin.from('agents').delete().eq('id', id)
+  }
+
+  // ── 24. Pro tier bypasses agent limit → 201 ───────────────────────────
+  {
+    await admin.from('subscriptions').update({ tier: 'pro' }).eq('user_id', user.id)
+
+    // Create 3 extra agents (already have 1 from setup = 4 total, above free limit)
+    const extras: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const { data } = await admin.from('agents').insert({
+        user_id: user.id, name: `Pro Limit Test ${i}`,
+        description: '', config: { type: 'custom', personality: { tone: 50, verbosity: 50, examplePhrases: [] }, capabilities: { webSearch: false, email: false, calendar: false, calculator: false, wordCounter: false, documents: { enabled: false, files: [] } }, limits: { maxMessageLength: 1000, avoidTopics: [] } },
+      }).select('id').single()
+      if (data) extras.push(data.id)
+    }
+
+    const res = await authedFetch('/api/agents', cookie, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Pro Agent', description: '', config: { type: 'custom', personality: { tone: 50, verbosity: 50, examplePhrases: [] }, capabilities: { webSearch: false, email: false, calendar: false, calculator: false, wordCounter: false, documents: { enabled: false, files: [] } }, limits: { maxMessageLength: 1000, avoidTopics: [] } } }),
+    })
+    const body = await res.json()
+    check('POST /api/agents (pro, 4 agents) → 201 (no limit)', res.status === 201, `status=${res.status} body=${JSON.stringify(body)}`)
+
+    for (const id of extras) await admin.from('agents').delete().eq('id', id)
+    if (body.id) await admin.from('agents').delete().eq('id', body.id)
+    await admin.from('subscriptions').update({ tier: 'free' }).eq('user_id', user.id)
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────────────
   console.log('\nCleaning up...')
   if (clonedAgentId)  await admin.from('agents').delete().eq('id', clonedAgentId)

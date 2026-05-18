@@ -140,6 +140,7 @@ export default function AgentWizard({
   const [showNameError, setShowNameError]   = useState(false)
   const [showSaveError, setShowSaveError]   = useState(false)
   const [isSaving, setIsSaving]             = useState(false)
+  const [agentLimitToast, setAgentLimitToast] = useState(false)
 
   // ── Draft / auto-save (create mode only) ─────────────────────────────────
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -186,6 +187,13 @@ export default function AgentWizard({
     localStorage.removeItem(DRAFT_KEY)
     setDraft(null)
   }
+  // Auto-dismiss agent limit toast after 8 seconds.
+  useEffect(() => {
+    if (!agentLimitToast) return
+    const id = setTimeout(() => setAgentLimitToast(false), 8000)
+    return () => clearTimeout(id)
+  }, [agentLimitToast])
+
   // ─────────────────────────────────────────────────────────────────────────
 
   const progressValue = ((currentStep - 1) / (TOTAL_STEPS - 1)) * 100
@@ -253,7 +261,12 @@ export default function AgentWizard({
       })
 
       if (!res.ok) {
-        setShowSaveError(true)
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        if (res.status === 402 && data.error === 'AGENT_LIMIT_REACHED') {
+          setAgentLimitToast(true)
+        } else {
+          setShowSaveError(true)
+        }
         return
       }
 
@@ -289,6 +302,26 @@ export default function AgentWizard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
     >
+
+      {/* ── Agent limit toast ── */}
+      {agentLimitToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-900 border border-violet-700/50 text-sm text-white px-5 py-3.5 rounded-xl shadow-xl max-w-sm w-full">
+          <svg className="w-4 h-4 text-violet-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          <span className="flex-1">
+            You&apos;ve reached the 3-agent limit.{' '}
+            <a href="/dashboard" className="text-violet-400 hover:text-violet-300 font-medium underline underline-offset-2">
+              Upgrade to Pro →
+            </a>
+          </span>
+          <button onClick={() => setAgentLimitToast(false)} className="text-gray-500 hover:text-gray-300 shrink-0">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* ── Draft resume banner ── */}
       {draft && (

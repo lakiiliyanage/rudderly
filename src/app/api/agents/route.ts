@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { agentSchema } from '@/lib/validations/agent'
+import { getUserUsage } from '@/lib/usage'
 
 // Next.js App Router automatically returns 405 for methods that have no
 // named export, but these explicit handlers ensure the response is JSON
@@ -30,6 +31,15 @@ export async function POST(request: Request) {
         { error: 'Unauthorised — please sign in.' },
         { status: 401 }
       )
+    }
+
+    // ── Agent limit check ───────────────────────────────────────────
+    const usage = await getUserUsage(user.id)
+    if (usage.agentCount >= usage.agentLimit) {
+      return NextResponse.json({
+        error:   'AGENT_LIMIT_REACHED',
+        message: 'Free plan allows 3 agents. Upgrade to Pro for unlimited agents.',
+      }, { status: 402 })
     }
 
     // ── Validation ──────────────────────────────────────────────────

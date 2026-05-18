@@ -431,7 +431,7 @@ Ask Claude Code:
 > - *Happy path (under limit): send a message as a user with `message_count = 50` in the `usage` table → response streams normally*
 > - *Failure path (message limit): manually set `message_count = 100` for your user in Supabase → send a message → returns 402 → upgrade card appears in chat; input and send button are disabled*
 > - *Failure path (agent limit): ensure `tier = 'free'` and 3 agents exist → try to create a 4th → returns 402 → toast with upgrade link appears*
-> - *Happy path (pro bypasses limits): set `tier = 'pro'`, `message_count = 200` → send a message → chat works normally — Pro tier has no limit*
+> - *Happy path (pro, under limit): set `tier = 'pro'`, `message_count = 200` → send a message → chat works normally — 200 is well under the Pro limit (Step 7b raises this to 5,000)*
 > *Do not mark complete until all four pass."*
 
 ---
@@ -444,7 +444,7 @@ Ask Claude Code:
 | First message of a new month | New `usage` row created for current period — no error |
 | Set `message_count = 100`, send a message | Returns 402; upgrade card in chat; input disabled |
 | Try creating a 4th agent (free tier) | Returns 402; toast with upgrade link appears |
-| Set `tier = 'pro'`, `message_count = 200`, send message | Chat works normally — Pro bypasses all limits |
+| Set `tier = 'pro'`, `message_count = 200`, send message | Chat works normally — 200 is under the Pro limit (Step 7b sets Pro to 5,000) |
 | Increment call fails silently | Chat response still completes — failure logged, not surfaced |
 
 Do not commit until every row passes.
@@ -453,11 +453,155 @@ Do not commit until every row passes.
 
 ### 💾 Commit Checkpoint — Usage Limits + Enforcement Complete
 
-Free users are gently blocked at their limits and shown a clear upgrade path instead of an error. Pro users have no restrictions.
+Free users are gently blocked at their limits and shown a clear upgrade path. Pro users will get their own limits in Step 7b.
 
 ```bash
 git add -A
 git commit -m "feat: usage tracking, free tier enforcement (100 msgs/month, 3 agents), upgrade prompts on limit"
+```
+
+---
+
+### Step 7b — Pro Tier Limits + Enterprise CTA
+
+Right now `PRO_LIMITS` is set to `Infinity` — which means a Pro user could send 500,000 messages a month and you'd absorb the entire Anthropic API bill. This step replaces `Infinity` with real limits (5,000 messages/month, 25 agents), adds an Enterprise tier CTA for Pro users who hit those limits, and updates every place in the codebase that assumed Pro meant unlimited. All changes happen in one Claude Code prompt so nothing is left in a broken intermediate state.
+
+**The three-tier model after this step:**
+
+| Tier | Messages/month | Agents | CTA when limit hit |
+|---|---|---|---|
+| **Free** | 100 | 3 | "Upgrade to Pro →" (link to `/dashboard`) |
+| **Pro** | 5,000 | 25 | "Contact us for Enterprise →" (mailto link) |
+| **Enterprise** | Custom | Custom | Handled offline |
+
+Ask Claude Code:
+> *"Make the following changes to introduce Pro tier limits (5,000 messages/month, 25 agents) and an Enterprise CTA. All five files must be updated in the same pass — leaving any one of them out will cause a type error or a broken UI state.*
+>
+> *Explain the key concept before starting: a **three-tier model** has three distinct access levels — Free, Pro, and Enterprise. Enterprise is not a product in the app; it's an offline sales conversation triggered by a 'Contact us' link.*
+>
+> **File 1 — `src/lib/usage.ts`**
+> - *Replace:*
+> ```typescript
+> const PRO_LIMITS = { messages: Infinity, agents: Infinity }
+> ```
+> - *With:*
+> ```typescript
+> const PRO_LIMITS = { messages: 5000, agents: 25 }
+> ```
+> - *No other changes in this file. The `getUserUsage` return type already supports finite numbers — this is a safe drop-in replacement.*
+>
+> **File 2 — `src/app/api/subscription/route.ts`**
+> - *Currently, Pro users receive `monthlyLimit: null` and `agentLimit: null` in the API response (null was used to signal "unlimited"). With real limits now defined, return the actual numbers instead:*
+> ```typescript
+> // Remove this:
+> monthlyLimit: limits.messages === Infinity ? null : limits.messages,
+> agentLimit: limits.agents === Infinity ? null : limits.agents,
+>
+> // Replace with:
+> monthlyLimit: limits.messages,
+> agentLimit: limits.agents,
+> ```
+> - *Explanation: since `Infinity` no longer appears in `PRO_LIMITS`, any null-coalescing logic that checked for `Infinity` is now dead code and can be removed. Both tiers now return plain integers.*
+>
+> **File 3 — `src/app/api/chat/route.ts`**
+> - *Update the 402 (Payment Required — user has hit their message limit and must take action) response body to include two new fields — `tier` (so the UI knows which tier the user is on) and `cta` (a string that tells the UI which call-to-action to render):*
+> ```typescript
+> return NextResponse.json({
+>   error: 'MESSAGE_LIMIT_REACHED',
+>   tier,
+>   message: tier === 'pro'
+>     ? `You've used all ${monthlyLimit.toLocaleString()} Pro messages this month.`
+>     : `You've used all ${monthlyLimit} messages this month.`,
+>   cta: tier === 'pro' ? 'enterprise' : 'upgrade',
+>   // 'upgrade'    → free user, show Upgrade to Pro button
+>   // 'enterprise' → pro user, show Contact Enterprise button
+> }, { status: 402 })
+> ```
+> - *Apply the same pattern to the agent limit 402 response in `src/app/api/agents/route.ts` (File 4 below).*
+>
+> **File 4 — `src/app/api/agents/route.ts`**
+> - *Update the agent-limit 402 response to include `tier` and `cta`:*
+> ```typescript
+> return NextResponse.json({
+>   error: 'AGENT_LIMIT_REACHED',
+>   tier,
+>   message: tier === 'pro'
+>     ? `You've reached the 25-agent limit on Pro. Contact us to upgrade.`
+>     : `Free plan allows 3 agents. Upgrade to Pro for up to 25.`,
+>   cta: tier === 'pro' ? 'enterprise' : 'upgrade',
+> }, { status: 402 })
+> ```
+>
+> **File 5 — Chat UI (`src/app/agents/[id]/page.tsx`)**
+> - *Update the 402 handler in the send function. Currently it shows a single upgrade card regardless of tier. Replace it with a conditional:*
+> ```typescript
+> if (res.status === 402) {
+>   const data = await res.json()
+>   if (data.cta === 'enterprise') {
+>     // Pro user has hit their limit
+>     setChatError({
+>       type: 'enterprise',
+>       message: data.message,
+>     })
+>   } else {
+>     // Free user has hit their limit
+>     setChatError({
+>       type: 'upgrade',
+>       message: data.message,
+>     })
+>   }
+>   return
+> }
+> ```
+> - *Update the error card rendered in the chat UI to show two distinct designs:*
+>   - *`type === 'upgrade'`: existing card — 'Upgrade to Pro for 5,000 messages/month →' with a button linking to `/dashboard`*
+>   - *`type === 'enterprise'`: new card — 'You've hit the Pro limit. Contact us for an Enterprise plan with custom limits.' with a `mailto:liyanage.lakii@gmail.com?subject=AgentForge Enterprise` link. Style with a different accent colour (e.g. purple instead of orange) so it visually distinguishes itself from the upgrade card.*
+>
+> **File 6 — Dashboard status bar (`src/app/dashboard/page.tsx`)**
+> - *Currently the Pro status bar shows `'Pro plan ✓ — Unlimited messages and agents'`. Update it to show real usage, exactly like the free bar:*
+> ```
+> Pro plan — 1,847 / 5,000 messages this month · 12 / 25 agents   [Contact Enterprise →]
+> ```
+> - *The `useSubscription` hook already returns `messageCount`, `monthlyLimit`, `agentCount`, `agentLimit` — since those are now real numbers for Pro, the progress bar component can be reused without modification. The only change is removing the `tier === 'pro' ? 'Unlimited' : ...` branch and letting the shared rendering logic handle both tiers.*
+> - *Add a small 'Contact Enterprise →' link (styled as a quiet text link, not a primary button) on the right side of the Pro status bar — `mailto:liyanage.lakii@gmail.com?subject=AgentForge Enterprise Enquiry`.*
+>
+> *After building all six files, verify by testing:*
+> - *Happy path (free, under limit): `tier = 'free'`, `message_count = 50` → send message → chat works → dashboard shows `50 / 100 messages`*
+> - *Happy path (pro, under limit): `tier = 'pro'`, `message_count = 200` → send message → chat works → dashboard shows `200 / 5,000 messages · [agent count] / 25 agents`*
+> - *Failure path (free hits message limit): `tier = 'free'`, `message_count = 100` → send message → 402 returned → orange upgrade card appears in chat with 'Upgrade to Pro' button → dashboard still loads*
+> - *Failure path (pro hits message limit): `tier = 'pro'`, `message_count = 5000` → send message → 402 returned → purple enterprise card appears in chat with `mailto:` link → no upgrade button shown*
+> - *Failure path (free hits agent limit): `tier = 'free'`, 3 agents → create 4th → 402 → upgrade toast → toast shows 'Upgrade to Pro for up to 25 agents'*
+> - *Failure path (pro hits agent limit): `tier = 'pro'`, 25 agents → create 26th → 402 → enterprise toast with contact link*
+> - *No TypeScript errors: run `npx tsc --noEmit` → zero errors (this catches any null vs number mismatches from the `monthlyLimit` change)*
+> - *No runtime errors: run `npm run dev` → check browser console on dashboard page → no uncaught errors from the removed null-check branches*
+> *Do not mark complete until all eight pass."*
+
+---
+
+### ✅ Before You Commit — Pro Tier Limits + Enterprise CTA
+
+| Test | Expected result |
+|---|---|
+| `npx tsc --noEmit` | Zero TypeScript errors — confirms null → number change is consistent |
+| `npm run dev` → dashboard (free user) | Shows `X / 100 messages · Y / 3 agents` + orange upgrade button |
+| `npm run dev` → dashboard (pro user) | Shows `X / 5,000 messages · Y / 25 agents` + quiet 'Contact Enterprise →' link |
+| `tier = 'free'`, `message_count = 100`, send message | Orange upgrade card in chat — 'Upgrade to Pro for 5,000 messages' |
+| `tier = 'pro'`, `message_count = 5000`, send message | Purple enterprise card in chat — mailto link, no upgrade button |
+| `tier = 'pro'`, 25 agents, create 26th | Enterprise toast with contact link — not the Pro upgrade toast |
+| `tier = 'free'`, 3 agents, create 4th | Upgrade toast — 'Upgrade to Pro for up to 25 agents' |
+| Browser console on dashboard | Zero uncaught errors — no broken null-check branches |
+
+Do not commit until every row passes.
+
+---
+
+### 💾 Commit Checkpoint — Pro Tier Limits + Enterprise CTA Complete
+
+AgentForge now has a proper three-tier model. No tier is open-ended, and the path from Pro to Enterprise is a human conversation triggered by a mailto link — not another automated payment flow.
+
+```bash
+git add -A
+git commit -m "feat: Pro tier limits (5,000 msgs/month, 25 agents), Enterprise CTA, remove Infinity limits"
 ```
 
 ---
@@ -987,9 +1131,13 @@ Work through these top to bottom. Don't mark anything done until you've actually
 - [ ] Dashboard shows upgrade button for free; Pro badge for pro
 - [ ] `GET /api/subscription` returns tier, messageCount, agentCount
 - [ ] `incrementMessageCount` atomically increments usage in `usage` table after each message
-- [ ] Free user at 100 messages → chat returns 402 → upgrade card in UI; input disabled
-- [ ] Free user at 3 agents → create attempt returns 402 → toast with upgrade link
-- [ ] Pro user with `message_count = 200` → chat works normally
+- [ ] Free user at 100 messages → chat returns 402 → orange upgrade card in UI; input disabled
+- [ ] Free user at 3 agents → create attempt returns 402 → upgrade toast ('Upgrade to Pro for up to 25 agents')
+- [ ] Pro user at 5,000 messages → chat returns 402 → purple Enterprise CTA card in UI; mailto link visible
+- [ ] Pro user at 25 agents → create attempt returns 402 → Enterprise contact toast
+- [ ] Pro user with `message_count = 200` → chat works normally (under 5,000 limit)
+- [ ] Dashboard Pro status bar shows `X / 5,000 messages · Y / 25 agents` and 'Contact Enterprise →' link
+- [ ] `npx tsc --noEmit` → zero TypeScript errors after `null` → number change
 - [ ] Upstash Redis database created (free tier)
 - [ ] `npm install @upstash/ratelimit @upstash/redis` complete
 - [ ] Chat route protected by `chatRatelimit` (20 req/min) — returns 429 after limit exceeded
@@ -1023,9 +1171,13 @@ Run these before closing out Week 10:
 | `POST /api/stripe/checkout` (free user, logged in) | Returns 200 with `https://checkout.stripe.com/...` URL |
 | Pay with `4242 4242 4242 4242`, expiry `12/29`, CVC `123` | Redirected to `/dashboard?upgraded=true` — success toast |
 | Dashboard — free user | Usage bar with message count, agent count, upgrade button |
-| Set `message_count = 100`, send a message | Returns 402; upgrade card in chat; input disabled |
-| Set `tier = 'pro'`, `message_count = 200`, send message | Chat works normally — Pro bypasses limits |
-| Try creating 4th agent (free tier) | Returns 402; upgrade toast appears |
+| Set `tier = 'free'`, `message_count = 100`, send message | Returns 402; orange upgrade card in chat; input disabled |
+| Set `tier = 'free'`, 3 agents, create 4th | Returns 402; upgrade toast — 'Upgrade to Pro for up to 25 agents' |
+| Set `tier = 'pro'`, `message_count = 200`, send message | Chat works normally — under 5,000 Pro limit |
+| Set `tier = 'pro'`, `message_count = 5000`, send message | Returns 402; purple Enterprise card with mailto link |
+| Set `tier = 'pro'`, 25 agents, create 26th | Returns 402; Enterprise contact toast — no upgrade button |
+| Dashboard — Pro user | Shows `X / 5,000 messages · Y / 25 agents` + 'Contact Enterprise →' link |
+| `npx tsc --noEmit` after Step 7b | Zero TypeScript errors |
 | Send 25 chat messages rapidly | After 20, returns 429; rate limit toast shows |
 | Type 4,001 chars in chat input | Send button disabled; counter red |
 | Send 'Ignore all previous instructions...' | Server logs flag; user gets normal response |
