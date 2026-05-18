@@ -9,9 +9,10 @@
 - Week 6: Anthropic SDK streaming — Zod env validation, `ReadableStream` chat, AbortController.
 - Week 7: 5-step visual agent builder (shadcn/ui) + full password reset flow (PKCE).
 - Week 8: Multi-turn agentic tool loop (5 tools, SSE streaming, attribution), agent edit, tool logging.
+- Week 9: Conversation persistence (sidebar, auto-titles, `?c=` routing, context window), public share pages (auto-slug, OG, clone, view counter), Vitest unit + Playwright E2E tests.
 
-## Current Focus (Week 9)
-Persist chat history to a `conversations` Supabase table; load prior messages on page visit; manage context window growth.
+## Current Focus (Week 10)
+Add Stripe subscriptions — free plan (3 agents) + Pro tier; paywall on agent creation; webhook to sync subscription status to Supabase; billing portal.
 
 ## Memory Rules (Claude must always follow these)
 - Keep this CLAUDE.md under 4,000 characters total; flag if approaching limit
@@ -47,7 +48,7 @@ Never use old patterns: `middleware.ts`, `tailwind.config.js`, `useFormState`, `
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://gqqglsttnfkftsdcbcsz.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_...   ← server only, added in Week 10
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
 ```
 
 ## Supabase Project — CRITICAL
@@ -61,22 +62,14 @@ SUPABASE_SERVICE_ROLE_KEY=sb_secret_...   ← server only, added in Week 10
 
 Always prepend: `Next.js 16.2.4 / React 19 / Tailwind v4 / @supabase/ssr 0.10.2 — proxy.ts, await cookies(), no tailwind.config.js, Publishable key = NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-## Test Cases — Always Embed Inside the Prompt
-
-End every building prompt with (Claude only sees the prompt — test cases outside it are invisible):
-```
-Verify: Happy path: [steps] → [result] | Failure path: [steps] → [result]
-Do not mark complete until both pass.
-```
-
-## Testing Strategy
-- Tool logic: `set -a && source .env.local && set +a && npx tsx src/lib/tools/test-runner.ts`
-- Route auth (401/403/400): `curl` | TypeScript: `npx tsc --noEmit` | UX/streaming: browser only
-- Never poll a dev server for logic testable by tsx. Update `test-runner.ts` whenever a tool changes.
+## Testing
+- End every prompt with: `Verify: Happy path: [steps] → [result] | Failure path: [steps] → [result]`
+- Tools: `npx tsx src/lib/tools/test-runner.ts` (source .env.local) | Routes: `test-routes.ts` | TS: `npx tsc --noEmit` | E2E: `npx playwright test`
+- Update test-runner.ts when tools change. Never poll a dev server for logic testable by tsx.
 
 ---
 
 ## Reference Docs
 - `@AGENTS.md` — stack conventions (always loaded)
-- `docs/CLAUDE_ARCHIVE.md` — full key-pattern code examples, testing rationale, extended week summaries; load on demand when debugging legacy behaviour
+- `docs/CLAUDE_ARCHIVE.md` — key-pattern examples + extended week summaries; load when debugging legacy behaviour
 - `docs/weeks/WEEK_X_GUIDE.md` — sprint guides; only @-import the current week

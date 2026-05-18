@@ -286,6 +286,83 @@ async function main() {
       `status=${res.status} body=${JSON.stringify(body)}`)
   }
 
+  // ── Week 10: Stripe Checkout ─────────────────────────────────────────
+
+  // ── 12. POST /api/stripe/checkout (no auth) → 401 ────────────────────
+  {
+    const res = await fetch(`${BASE_URL}/api/stripe/checkout`, { method: 'POST' })
+    check('POST /api/stripe/checkout (no auth) → 401', res.status === 401, `got ${res.status}`)
+  }
+
+  // ── 13. POST /api/stripe/checkout (free user) → 200 + checkout URL ───
+  {
+    const res  = await authedFetch('/api/stripe/checkout', cookie, { method: 'POST' })
+    const body = await res.json()
+    const ok   = res.status === 200
+      && typeof body.url === 'string'
+      && body.url.startsWith('https://checkout.stripe.com')
+    check('POST /api/stripe/checkout (free user) → 200 + checkout.stripe.com URL', ok,
+      `status=${res.status} url=${body.url ?? 'missing'}`)
+  }
+
+  // ── 14. POST /api/stripe/checkout (already pro) → 400 ────────────────
+  {
+    await admin
+      .from('subscriptions')
+      .update({ tier: 'pro' })
+      .eq('user_id', user.id)
+
+    const res  = await authedFetch('/api/stripe/checkout', cookie, { method: 'POST' })
+    const body = await res.json()
+    check('POST /api/stripe/checkout (already pro) → 400 + Already on Pro plan',
+      res.status === 400 && body.error === 'Already on Pro plan',
+      `status=${res.status} body=${JSON.stringify(body)}`)
+
+    // reset tier so cleanup is clean
+    await admin
+      .from('subscriptions')
+      .update({ tier: 'free' })
+      .eq('user_id', user.id)
+  }
+
+  // ── Week 10: Subscription API ─────────────────────────────────────────
+
+  // ── 15. GET /api/subscription (no auth) → 401 ────────────────────────
+  {
+    const res = await fetch(`${BASE_URL}/api/subscription`)
+    check('GET /api/subscription (no auth) → 401', res.status === 401, `got ${res.status}`)
+  }
+
+  // ── 16. GET /api/subscription (free user) → 200 with expected shape ──
+  {
+    const res  = await authedFetch('/api/subscription', cookie)
+    const body = await res.json()
+    const ok   = res.status === 200
+      && body.tier === 'free'
+      && typeof body.messageCount === 'number'
+      && body.monthlyLimit === 100
+      && typeof body.agentCount === 'number'
+      && body.agentLimit === 3
+    check('GET /api/subscription (free user) → 200 with free tier shape', ok,
+      `status=${res.status} body=${JSON.stringify(body)}`)
+  }
+
+  // ── 17. GET /api/subscription (pro user) → null limits ───────────────
+  {
+    await admin.from('subscriptions').update({ tier: 'pro' }).eq('user_id', user.id)
+
+    const res  = await authedFetch('/api/subscription', cookie)
+    const body = await res.json()
+    const ok   = res.status === 200
+      && body.tier === 'pro'
+      && body.monthlyLimit === null
+      && body.agentLimit === null
+    check('GET /api/subscription (pro user) → 200 with null limits', ok,
+      `status=${res.status} body=${JSON.stringify(body)}`)
+
+    await admin.from('subscriptions').update({ tier: 'free' }).eq('user_id', user.id)
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────────────
   console.log('\nCleaning up...')
   if (clonedAgentId)  await admin.from('agents').delete().eq('id', clonedAgentId)
