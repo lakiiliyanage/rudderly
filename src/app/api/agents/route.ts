@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { agentSchema } from '@/lib/validations/agent'
 import { getUserUsage } from '@/lib/usage'
+import { apiRatelimit } from '@/lib/ratelimit'
 
 // Next.js App Router automatically returns 405 for methods that have no
 // named export, but these explicit handlers ensure the response is JSON
@@ -30,6 +31,21 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Unauthorised — please sign in.' },
         { status: 401 }
+      )
+    }
+
+    // ── Rate limit check ────────────────────────────────────────────
+    const { success, remaining, reset } = await apiRatelimit.limit(user.id)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please wait a moment.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After':          String(Math.ceil((reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(remaining),
+          },
+        }
       )
     }
 

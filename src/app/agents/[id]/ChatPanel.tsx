@@ -96,6 +96,7 @@ export default function ChatPanel({
   const [interrupted,     setInterrupted]     = useState(false)
   const [isLoading,       setIsLoading]       = useState(!!searchParams.get('c'))
   const [saveToast,       setSaveToast]       = useState<string | null>(null)
+  const [rateLimitToast,  setRateLimitToast]  = useState(false)
   const [chatError,       setChatError]       = useState<{ type: 'upgrade' | 'enterprise'; message: string } | null>(null)
   // Tracks which assistant message indices have their Sources panel expanded.
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
@@ -182,6 +183,13 @@ export default function ChatPanel({
     return () => clearTimeout(t)
   }, [saveToast])
 
+  // Auto-dismiss rate limit toast and re-enable input after 3 seconds.
+  useEffect(() => {
+    if (!rateLimitToast) return
+    const t = setTimeout(() => setRateLimitToast(false), 3000)
+    return () => clearTimeout(t)
+  }, [rateLimitToast])
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, thinkingState])
@@ -261,7 +269,7 @@ export default function ChatPanel({
             message: data.message ?? 'Message limit reached.',
           })
         } else if (res.status === 429) {
-          setError('Too many messages — please wait a moment before sending again.')
+          setRateLimitToast(true)
         } else if (res.status === 500) {
           setError('Something went wrong on our end. Try again in a moment.')
         } else {
@@ -440,6 +448,16 @@ export default function ChatPanel({
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+        </div>
+      )}
+
+      {/* ── Rate limit toast ───────────────────────────────────────────── */}
+      {rateLimitToast && (
+        <div className="mx-4 mt-3 px-4 py-3 bg-orange-950/50 border border-orange-800/60 rounded-xl text-sm text-orange-300 shrink-0 flex items-center gap-2">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Slow down! Please wait a few seconds before sending another message.
         </div>
       )}
 
@@ -623,7 +641,7 @@ export default function ChatPanel({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isWorking || isLoading || !!chatError}
+            disabled={isWorking || isLoading || !!chatError || rateLimitToast}
             placeholder={chatError ? 'Upgrade to continue chatting' : `Message ${agentName}…`}
             className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-50"
           />
@@ -641,7 +659,7 @@ export default function ChatPanel({
           ) : (
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || thinkingState !== 'idle' || isLoading || !!chatError}
+              disabled={!input.trim() || thinkingState !== 'idle' || isLoading || !!chatError || rateLimitToast || input.length > 4000}
               className="gap-2 bg-violet-600 hover:bg-violet-500 min-w-[90px] shrink-0 active:scale-95"
             >
               Send
@@ -663,16 +681,14 @@ export default function ChatPanel({
           disproportionate share of the window and degrade the quality of replies.
         */}
         <div className="flex items-center justify-between mt-2 px-1">
-          {input.trim().length > 4000 ? (
-            <p className="text-xs text-yellow-500/80">
-              Your message is very long — this may affect response quality.
-            </p>
+          {input.length > 4000 ? (
+            <p className="text-xs text-red-400">Message too long — please shorten to continue.</p>
           ) : (
             <p className="text-gray-600 text-xs">Enter to send · Shift+Enter for a new line</p>
           )}
           <p className={`text-xs tabular-nums ${
-            input.length >= 3800 ? 'text-red-400'         :
-            input.length >= 3000 ? 'text-yellow-500/80'   :
+            input.length > 4000  ? 'text-red-400'       :
+            input.length >= 3500 ? 'text-orange-400'    :
                                    'text-gray-600'
           }`}>
             {input.length} / 4000

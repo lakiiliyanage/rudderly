@@ -5,6 +5,7 @@ import { env } from '@/lib/env'
 import { buildSystemPrompt } from '@/lib/buildSystemPrompt'
 import { prepareMessagesForContext } from '@/lib/context'
 import { getUserUsage, incrementMessageCount } from '@/lib/usage'
+import { chatRatelimit } from '@/lib/ratelimit'
 import {
   dateTimeTool,
   webSearchTool,
@@ -15,6 +16,7 @@ import {
 import { dispatchToolCall } from '@/lib/tools/runner'
 import type { ToolLogCore } from '@/lib/tools/runner'
 import type { AgentConfig } from '@/lib/types/agent'
+import { sanitizeUserMessage } from '@/lib/sanitize'
 
 const methodNotAllowed = () =>
   NextResponse.json(
@@ -38,6 +40,21 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Unauthorised — please sign in.' },
         { status: 401 }
+      )
+    }
+
+    // ── Rate limit check ─────────────────────────────────────────────────
+    const { success, remaining, reset } = await chatRatelimit.limit(user.id)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many messages. Please wait a moment.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After':          String(Math.ceil((reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(remaining),
+          },
+        }
       )
     }
 
@@ -67,6 +84,16 @@ export async function POST(request: Request) {
         { error: 'Request body must include agentId and messages array.' },
         { status: 400 }
       )
+    }
+
+    // ── Sanitize last user message ────────────────────────────────────────
+    const lastMsg = messages.at(-1)
+    if (lastMsg?.role === 'user' && typeof lastMsg.content === 'string') {
+      const result = sanitizeUserMessage(lastMsg.content)
+      if (!result.safe) {
+        return NextResponse.json({ error: result.reason }, { status: 400 })
+      }
+      messages[messages.length - 1] = { ...lastMsg, content: result.sanitized }
     }
 
     // ── Fetch agent ───────────────────────────────────────────────────────

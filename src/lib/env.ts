@@ -40,6 +40,14 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z
     .string()
     .url('NEXT_PUBLIC_APP_URL must be a valid URL'),
+
+  UPSTASH_REDIS_REST_URL: z
+    .string()
+    .url('UPSTASH_REDIS_REST_URL must be a valid URL'),
+
+  UPSTASH_REDIS_REST_TOKEN: z
+    .string()
+    .min(1, 'UPSTASH_REDIS_REST_TOKEN is missing'),
 })
 
 const result = envSchema.safeParse({
@@ -53,6 +61,8 @@ const result = envSchema.safeParse({
   STRIPE_PRO_PRICE_ID:                process.env.STRIPE_PRO_PRICE_ID,
   STRIPE_WEBHOOK_SECRET:              process.env.STRIPE_WEBHOOK_SECRET,
   NEXT_PUBLIC_APP_URL:                process.env.NEXT_PUBLIC_APP_URL,
+  UPSTASH_REDIS_REST_URL:             process.env.UPSTASH_REDIS_REST_URL,
+  UPSTASH_REDIS_REST_TOKEN:           process.env.UPSTASH_REDIS_REST_TOKEN,
 })
 
 if (!result.success) {

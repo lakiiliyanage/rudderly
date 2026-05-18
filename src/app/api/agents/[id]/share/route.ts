@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { generateBaseSlug, addUniqueSuffix } from '@/lib/slug'
 import { NextResponse } from 'next/server'
+import { apiRatelimit } from '@/lib/ratelimit'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -24,6 +25,20 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorised — not logged in.' }, { status: 401 })
+    }
+
+    const { success, remaining, reset } = await apiRatelimit.limit(user.id)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please wait a moment.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After':          String(Math.ceil((reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(remaining),
+          },
+        }
+      )
     }
 
     const { data: agent } = await supabase

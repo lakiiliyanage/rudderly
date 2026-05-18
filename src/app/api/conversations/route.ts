@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { apiRatelimit } from '@/lib/ratelimit'
 
 export async function POST(request: Request) {
   try {
@@ -10,6 +11,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Unauthorised — not logged in.' },
         { status: 401 }
+      )
+    }
+
+    const { success, remaining, reset } = await apiRatelimit.limit(user.id)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests. Please wait a moment.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After':          String(Math.ceil((reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(remaining),
+          },
+        }
       )
     }
 
