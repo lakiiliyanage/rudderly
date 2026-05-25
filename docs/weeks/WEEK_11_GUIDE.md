@@ -393,13 +393,91 @@ Ask Claude Code:
 
 ### ✅ Before You Commit — Sentry + Webhook
 
-| Test | Expected result |
-|---|---|
-| Visit `/sentry-example-page` and click 'Throw Sample Error' | Error appears in Sentry dashboard with readable TypeScript stack trace |
-| `SENTRY_DSN` removed from `.env.local` | App still runs — Sentry failure is silent, not a crash |
-| `.env.sentry-build-plugin` exists locally | Contains `SENTRY_AUTH_TOKEN=sntrys_...` — confirm it is in `.gitignore` and never committed |
-| Stripe 'Send test event' from dashboard | Vercel function log shows 200; Supabase `subscriptions` updated |
-| Wrong `STRIPE_WEBHOOK_SECRET` in Vercel | Stripe shows 400 response for the test event — signature validation working |
+Run each test in order. Do not commit until all 5 pass.
+
+---
+
+**Test 1 — Visit `/sentry-example-page` and click 'Throw Sample Error'**
+
+Confirms Sentry is receiving errors from production with readable stack traces.
+
+1. Make sure you've committed and pushed the Sentry wizard files (`git push origin main`) and Vercel has finished redeploying
+2. Open `https://agentforge-five.vercel.app/sentry-example-page` in your browser
+3. Click **"Throw Sample Error"**
+4. Go to [sentry.io](https://sentry.io) → your `javascript-nextjs` project → **Issues** (left sidebar)
+5. Within 30 seconds you should see a new error with the full TypeScript file name and line number — not minified code
+
+✅ Expected: error appears in Sentry Issues with readable stack trace
+
+---
+
+**Test 2 — `SENTRY_DSN` removed from `.env.local` → app still runs**
+
+Confirms Sentry is optional infrastructure — your app should never crash just because Sentry is misconfigured.
+
+1. Open `.env.local` in your code editor
+2. Comment out the DSN line: `# SENTRY_DSN=https://...`
+3. In your terminal: `npm run dev`
+4. Visit `http://localhost:3000` — the app should load and work normally
+5. Open browser DevTools (F12) → Console tab — you may see a Sentry warning but **no crash**
+6. **Restore the line** before continuing — remove the `#` and save
+
+✅ Expected: app loads normally, no crash, at most a console warning from the Sentry SDK
+
+---
+
+**Test 3 — `.env.sentry-build-plugin` exists and is in `.gitignore`**
+
+Confirms the auth token is stored safely and will never be accidentally committed.
+
+Run these three commands in your terminal from the agentforge folder:
+
+```bash
+# 1. Confirm the file exists and contains the token
+cat .env.sentry-build-plugin
+# Expected output: SENTRY_AUTH_TOKEN=sntrys_eyJ...
+
+# 2. Confirm git is ignoring it
+git check-ignore -v .env.sentry-build-plugin
+# Expected output: .gitignore:X:.env.sentry-build-plugin
+
+# 3. Confirm it is not tracked by git
+git status
+# Expected: .env.sentry-build-plugin does NOT appear anywhere in the output
+```
+
+✅ Expected: all three commands confirm the file exists locally, is gitignored, and is not tracked
+
+---
+
+**Test 4 — Stripe 'Send test event' → Vercel log shows 200; Supabase updated**
+
+Confirms your production webhook is wired correctly end-to-end.
+
+1. Go to [stripe.com](https://stripe.com) → live mode → **Developers → Workbench → Webhooks**
+2. Click your `agentforge-production` webhook
+3. Click **"Send test event"** → choose `checkout.session.completed` → Send
+4. Check Vercel logs: go to [vercel.com](https://vercel.com) → your project → **Logs** tab → filter by `/api/stripe/webhook` → confirm a `200` response appears within a few seconds
+5. Check Supabase: go to [supabase.com](https://supabase.com) → your project → **Table Editor → subscriptions** → confirm a row was inserted or updated (test events use dummy IDs so the row will look unusual — that's expected)
+
+✅ Expected: Vercel log shows `200`; Supabase `subscriptions` table has a new or updated row
+
+---
+
+**Test 5 — Wrong `STRIPE_WEBHOOK_SECRET` in Vercel → Stripe shows 400**
+
+Confirms signature validation is rejecting tampered or mismatched webhooks — critical for security.
+
+1. Go to Vercel → your project → **Settings → Environment Variables**
+2. Find `STRIPE_WEBHOOK_SECRET` → edit it → change the last few characters to something wrong (e.g. add `WRONG` at the end)
+3. Go to Vercel → **Deployments** → click **Redeploy** on the latest deployment (env var changes require a redeploy to take effect)
+4. Wait ~2 minutes for the redeploy to finish
+5. Go back to Stripe → your webhook → **Send test event** again → `checkout.session.completed`
+6. Stripe should show a **400** response — your server correctly rejected the event because the signature didn't match
+
+**Immediately after:** restore the correct `STRIPE_WEBHOOK_SECRET` value in Vercel and redeploy again before continuing.
+
+✅ Expected: Stripe shows `400` — signature validation is working correctly
 
 ---
 
