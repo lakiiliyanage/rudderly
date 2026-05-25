@@ -13,12 +13,14 @@ export async function sendWelcomeEmail(to: string, name?: string): Promise<void>
   const dashboardUrl = `${env.NEXT_PUBLIC_APP_URL}/dashboard`
 
   try {
-    await getResend().emails.send({
+    console.log('[EMAIL] calling Resend.send to', to)
+    const result = await getResend().emails.send({
       from: 'onboarding@resend.dev',
       to,
       subject: 'Welcome to AgentForge 🎉',
       html: `<p>${greeting} — you're in! Create your first AI agent: <a href="${dashboardUrl}">${dashboardUrl}</a>. Questions? Reply to this email.</p>`,
     })
+    console.log('[EMAIL] Resend result:', JSON.stringify(result))
   } catch (err) {
     console.error('[EMAIL] Failed to send welcome email to', to, err)
   }

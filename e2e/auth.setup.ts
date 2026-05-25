@@ -72,6 +72,7 @@ setup('authenticate', async ({ page }) => {
   // Persist IDs so teardown can delete them, and so spec files can read the agent ID.
   fs.writeFileSync(TEST_DATA_FILE, JSON.stringify({
     agentId: agent.id,
+    userId,
     ...(tempUserId && { tempUserId }),
   }), 'utf8')
 

@@ -29,8 +29,9 @@ function truncate(str: string | null, max: number): string {
 }
 
 function CapBadges({ config }: { config: AgentConfig }) {
-  const caps = config.capabilities
+  const caps = config?.capabilities
   const badges: { key: string; label: string }[] = []
+  if (!caps) return null
   if (caps.webSearch)          badges.push({ key: 'webSearch',   label: '🔍 Web search' })
   if (caps.calculator)         badges.push({ key: 'calculator',  label: '🧮 Calculator' })
   if (caps.wordCounter)        badges.push({ key: 'wordCounter', label: '📝 Word counter' })
