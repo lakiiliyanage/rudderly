@@ -289,6 +289,7 @@ Your app is live. Before moving on, save your current state in case anything goe
 ```bash
 git add -A
 git commit -m "feat: production deployment — Vercel connected, env vars configured, live URL active"
+git push origin main
 ```
 
 ---
@@ -298,58 +299,65 @@ git commit -m "feat: production deployment — Vercel connected, env vars config
 ### Step 5 — Create Your Sentry Account and Project
 
 1. Go to [sentry.io](https://sentry.io) and create a free account
+   - **Name** — your personal name (e.g. "Lakii Liyanage") — this is your user account display name
+   - **Organization Name** — the workspace that holds all your projects (e.g. `agentforge`) — different from your personal name
 2. Create a new project — choose **Next.js** as the platform
 3. Give it the name `agentforge`
-4. Copy the **DSN** (Data Source Name — the URL that tells the Sentry SDK where to send errors. Format: `https://[key]@[org].ingest.sentry.io/[project-id]`)
-5. Also navigate to **Settings → Auth Tokens → Create New Token** — select `project:write` and `org:read` scopes (permissions — the specific actions this token is allowed to perform; `project:write` lets the SDK upload source maps, `org:read` lets it verify your organisation). Copy the token.
+4. Copy the **DSN** (Data Source Name — the URL that tells the Sentry SDK where to send errors. Format: `https://[key]@[org].ingest.sentry.io/[project-id]`). You'll need this only to add it to Vercel's environment variables in the next step — the wizard will embed it directly into your config files automatically.
+5. Note your **organization slug** — visible in your Sentry URL: `sentry.io/organizations/[slug]`. You'll need this when the wizard prompts you.
 
-Add to `.env.local`:
+> ⚠️ **Do not manually create an auth token or add env vars yet.** The Sentry wizard (Step 6) handles all of that automatically — it creates a `.env.sentry-build-plugin` file with your auth token, and the org/project values are embedded directly in your config files. Doing it manually first creates duplicates.
+
+Add `SENTRY_DSN` to both `.env.local` (for local development) and Vercel's environment variables (Production + Preview):
+
 ```bash
 SENTRY_DSN=https://your_key@your_org.ingest.sentry.io/your_project_id
-SENTRY_AUTH_TOKEN=your_auth_token_here
-SENTRY_ORG=your_org_slug_here     # visible in your Sentry URL: sentry.io/organizations/[slug]
-SENTRY_PROJECT=agentforge
 ```
 
-Also add `SENTRY_DSN` to Vercel's environment variables (Production + Preview).
+> 💡 The DSN is not a secret — it gets embedded in your frontend JavaScript bundle and is intentionally public. It's safe to commit to `.env.local` and visible in Vercel. The wizard also hardcodes it into your config files, so this env var gives you the flexibility to change it later without a code deploy.
 
 ---
 
 ### Step 6 — Install and Configure Sentry
 
 Ask Claude Code:
-> *"Install and configure Sentry in the AgentForge Next.js 16.2.4 project. Use the Sentry wizard which handles all the configuration automatically:*
+> *"Install and configure Sentry in the AgentForge Next.js project. Use the Sentry wizard which handles all the configuration automatically:*
 >
 > ```bash
-> npx @sentry/wizard@latest -i nextjs
+> npx @sentry/wizard@latest -i nextjs --saas --org agentforge --project javascript-nextjs
 > ```
 >
-> *The wizard will:*
+> *This is the command Sentry shows you on your project setup page — it's pre-filled with your org slug (`agentforge`) and project name (`javascript-nextjs`). Use this exact command; it skips the interactive org/project prompts. Note: Sentry named the project `javascript-nextjs` by default — this is just a label inside Sentry's dashboard and has no effect on your app.*
+>
+> *The wizard will prompt you to select features — choose **Error Monitoring** and **Logs** at minimum. Tracing and Session Replay are optional (they add cost at scale).*
+>
+> *The wizard will automatically:*
 > - *Install `@sentry/nextjs` (the Sentry SDK for Next.js)*
-> - *Create `sentry.client.config.ts` — runs in the browser; captures frontend JavaScript errors*
+> - *Create `instrumentation-client.ts` — the client-side init file; runs in the browser and captures frontend JavaScript errors. Note: this file is named `instrumentation-client.ts`, not `sentry.client.config.ts` — the naming changed in recent versions.*
+> - *Create `instrumentation.ts` — registers the server and edge configs with Next.js. This is the server-side entry point; Next.js reads this file automatically.*
 > - *Create `sentry.server.config.ts` — runs on the server; captures API route errors and server component crashes*
-> - *Create `sentry.edge.config.ts` — runs in Vercel's Edge Runtime (a lightweight JavaScript environment for Vercel middleware); captures `proxy.ts` errors*
-> - *Update `next.config.ts` to wrap the config with `withSentryConfig` (a wrapper function that enables source map uploads — the files that translate minified production code back to readable TypeScript — so Sentry shows you readable stack traces)*
-> - *Create `src/app/global-error.tsx` — a top-level error boundary (a React component that catches unhandled errors and shows a fallback UI instead of a white screen) that reports to Sentry*
+> - *Create `sentry.edge.config.ts` — runs in Vercel's Edge Runtime (a lightweight JavaScript environment for Vercel middleware); captures middleware errors*
+> - *Update `next.config.ts` to wrap the config with `withSentryConfig` (a wrapper function that enables source map uploads — the files that translate minified production code back to readable TypeScript — and ad-blocker bypassing via a tunnel route)*
+> - *Create `app/global-error.tsx` — a top-level error boundary (a React component that catches unhandled errors and shows a fallback UI instead of a white screen) that reports to Sentry*
+> - *Create `.env.sentry-build-plugin` — a new file containing your `SENTRY_AUTH_TOKEN` (the credential that lets the build process upload source maps). This file is automatically added to `.gitignore` — it is never committed.*
+> - *Create `app/sentry-example-page/` — a test page at `/sentry-example-page` with a button that triggers a real test error. You'll use this to verify your setup — no need to manually add test buttons anywhere.*
 >
 > *After the wizard finishes, open each generated config file and confirm:*
-> - *`SENTRY_DSN` is read from `process.env.SENTRY_DSN` — not hardcoded*
-> - *`tracesSampleRate: 0.1` — set this to 0.1 (10%) for production. A value of 1.0 samples every request, which is expensive; 0.1 captures enough data for debugging without excessive cost*
+> - *`tracesSampleRate: 0.1` — set this to 0.1 (10%) for production in both `instrumentation-client.ts` and `sentry.server.config.ts`. A value of 1.0 samples every request, which is expensive; 0.1 captures enough data for debugging without excessive cost. The wizard sets `1.0` for development and `0.1` for production by default — confirm this is correct.*
 > - *`debug: false` in the server config — `debug: true` floods your terminal logs, fine for local but never in production*
 >
-> *Then add `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` to `.env.local` (already done in Step 5) and to Vercel's environment variables. These are needed for source map uploads during the Vercel build.*
+> *Then copy the `SENTRY_AUTH_TOKEN` value from `.env.sentry-build-plugin` and add it to Vercel's environment variables (Production + Preview). This is needed so Vercel can upload source maps during the build. `SENTRY_DSN` should already be in Vercel from Step 5.*
 >
-> *Finally, add a deliberate test error to confirm Sentry is working. In `src/app/dashboard/page.tsx`, temporarily add a button:*
-> ```typescript
-> <button onClick={() => { throw new Error('Sentry test error — delete me') }}>
->   Test Sentry
-> </button>
-> ```
+> *To verify Sentry is working:*
+> 1. *Run `npm run dev`*
+> 2. *Visit [http://localhost:3000/sentry-example-page](http://localhost:3000/sentry-example-page) — this page was created by the wizard*
+> 3. *Click **"Throw Sample Error"***
+> 4. *Open your Sentry dashboard → Issues — the error should appear within 30 seconds with a readable TypeScript stack trace (not minified)*
 >
 > *After building, verify by testing:*
-> - *Happy path: run `npm run dev`, click the 'Test Sentry' button → check your Sentry dashboard → the error 'Sentry test error — delete me' appears within 30 seconds with the correct file name and line number (not minified — readable TypeScript)*
-> - *Failure path: remove `SENTRY_DSN` from `.env.local`, restart the dev server, click the button → Sentry SDK logs a warning to console but the app does not crash — Sentry is optional infrastructure, never a critical dependency*
-> *Do not mark complete until both pass. Then delete the test button before committing."*
+> - *Happy path: visit `/sentry-example-page`, click 'Throw Sample Error' → error appears in Sentry Issues with the correct file name and line number in readable TypeScript*
+> - *Failure path: remove `SENTRY_DSN` from `.env.local`, restart the dev server, click the button → Sentry SDK logs a warning to the browser console but the app does not crash — Sentry is optional infrastructure, never a critical dependency*
+> *Do not mark complete until both pass."*
 
 ---
 
@@ -387,9 +395,9 @@ Ask Claude Code:
 
 | Test | Expected result |
 |---|---|
-| Click 'Test Sentry' button on localhost | Error appears in Sentry dashboard with readable TypeScript stack trace |
+| Visit `/sentry-example-page` and click 'Throw Sample Error' | Error appears in Sentry dashboard with readable TypeScript stack trace |
 | `SENTRY_DSN` removed from `.env.local` | App still runs — Sentry failure is silent, not a crash |
-| Test button deleted from dashboard page | No Sentry test button visible in the UI |
+| `.env.sentry-build-plugin` exists locally | Contains `SENTRY_AUTH_TOKEN=sntrys_...` — confirm it is in `.gitignore` and never committed |
 | Stripe 'Send test event' from dashboard | Vercel function log shows 200; Supabase `subscriptions` updated |
 | Wrong `STRIPE_WEBHOOK_SECRET` in Vercel | Stripe shows 400 response for the test event — signature validation working |
 
@@ -400,6 +408,7 @@ Ask Claude Code:
 ```bash
 git add -A
 git commit -m "feat: Sentry error monitoring, production Stripe webhook endpoint"
+git push origin main
 ```
 
 ---
@@ -544,6 +553,7 @@ Ask Claude Code:
 ```bash
 git add -A
 git commit -m "feat: GitHub Actions CI workflow — TypeScript check, build, and tests on every push"
+git push origin main
 ```
 
 ---
@@ -627,6 +637,7 @@ Document what you found and fixed during the smoke test.
 ```bash
 git add -A
 git commit -m "fix: production smoke test fixes — [describe what you actually fixed]"
+git push origin main
 ```
 
 ---
@@ -857,6 +868,7 @@ Do not commit until every row for your attempted stretch tasks shows the expecte
 ```bash
 git add -A
 git commit -m "feat: Vercel Analytics, Lighthouse fixes, custom error pages, branch protection, preview deployments, staging environment"
+git push origin main
 ```
 
 ---
@@ -868,6 +880,7 @@ Run `/sprint-close` in Claude Code first to let it review the week's work, clean
 ```bash
 git add -A
 git commit -m "feat: week 11 complete — Vercel production deploy, Sentry monitoring, GitHub Actions CI, production smoke test"
+git push origin main
 ```
 
 After committing, open `CLAUDE.md` and move "Week 11" from Current Focus into Completed Work with a two-sentence summary of what shipped. Update the Current Focus to Week 12: *"Launch week — demo video, Hacker News Show HN post, Twitter/X thread, LinkedIn post, ProductHunt submission, changelog page, press kit, feedback form."*
@@ -895,9 +908,10 @@ Work through these top to bottom. Don't mark anything done until you've actually
 - [ ] Public share page loads in incognito at the live URL
 - [ ] Sentry account created and project set up
 - [ ] `@sentry/nextjs` installed and configured via wizard
-- [ ] `SENTRY_DSN` added to both `.env.local` and Vercel environment variables
-- [ ] Test error button confirmed Sentry captures errors with readable TypeScript stack traces
-- [ ] Test error button deleted before committing
+- [ ] `SENTRY_DSN` added to Vercel environment variables (Production + Preview)
+- [ ] `SENTRY_AUTH_TOKEN` copied from `.env.sentry-build-plugin` and added to Vercel environment variables
+- [ ] `.env.sentry-build-plugin` confirmed in `.gitignore` — never committed
+- [ ] Visited `/sentry-example-page` and clicked 'Throw Sample Error' — error appeared in Sentry with readable TypeScript stack trace
 - [ ] Production Stripe webhook created pointing to live URL
 - [ ] New `STRIPE_WEBHOOK_SECRET` from production webhook added to Vercel
 - [ ] Stripe 'Send test event' returns 200 and updates Supabase
