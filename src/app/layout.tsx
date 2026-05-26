@@ -10,16 +10,33 @@ import { Analytics } from "@vercel/analytics/react";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",   // show fallback font while Geist loads — improves FCP/LCP
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "AgentForge — Build AI Agents Without Code",
   description: "The visual, no-code builder for non-developers. Create, configure, and share AI agents in minutes.",
+  openGraph: {
+    title: "AgentForge — Build AI Agents Without Code",
+    description: "The visual, no-code builder for non-developers. Create, configure, and share AI agents in minutes.",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AgentForge — Build AI Agents Without Code",
+    description: "The visual, no-code builder for non-developers. Create, configure, and share AI agents in minutes.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default async function RootLayout({

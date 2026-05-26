@@ -41,7 +41,7 @@ export default function Navbar({ initialLoggedIn = false }: { initialLoggedIn?: 
     // backdrop-blur-md    — blurs whatever is scrolling behind the nav (frosted glass effect)
     // border-b            — bottom border only
     // border-gray-800/60  — subtle, semi-transparent border line
-    <nav className="sticky top-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800/60">
+    <nav aria-label="Main navigation" className="sticky top-0 z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800/60">
 
       {/* max-w-5xl mx-auto  — centres content, matches the page width used on the landing page */}
       {/* px-6 h-16          — 24px side padding, 64px tall */}
