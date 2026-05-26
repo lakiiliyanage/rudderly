@@ -93,6 +93,7 @@ Read this table before writing a single line. These mental models will make the 
 | **Environment variables in production** | The same `.env.local` variables your app needs — API keys, database URLs — but stored securely in Vercel's dashboard instead of a file on your laptop. Vercel injects them at build time and runtime | Like Figma's team library variables — they're defined once in a central place and referenced everywhere, not hardcoded into each component |
 | **CI/CD** | Continuous Integration / Continuous Deployment. CI = automated checks that run every time you push code (build, type check, tests). CD = automated deployment when checks pass. Together they mean: every push is checked, and passing pushes go live automatically | Like Figma's design linting plugin — every time you publish a component, it checks against your design system rules and flags violations automatically |
 | **GitHub Actions** | GitHub's built-in automation system. You define workflows in YAML files — text-based config files for automation that use `key: value` pairs — that run automatically on events like "someone pushed to main" | Like a Figma plugin that fires automatically when a component is published — you define the rules once, it enforces them forever |
+| **ESLint** | A linter — a static analysis tool that reads your code without running it and flags problems: unused variables, unresolved imports, `==` used instead of `===`, and patterns known to cause bugs at runtime. Configured in `.eslintrc.json`. Next.js ships with sensible ESLint defaults | Like Figma's design linting plugin — it checks your work against predefined rules (no hardcoded hex values, no missing alt text) and flags deviations before handoff |
 | **YAML** | A text file format used for configuration — more readable than JSON because it uses indentation instead of braces. GitHub Actions workflows are written in YAML | Like a Figma Styles definition — a structured text description of rules rather than raw code |
 | **Workflow file** | A YAML file in your repo at `.github/workflows/[name].yml` that tells GitHub Actions what to do and when. GitHub reads it automatically — you don't install anything | Like a Figma Auto Layout rule — you define it once in the component, and it enforces itself every time that component is used |
 | **Job** | One unit of work inside a GitHub Actions workflow — runs on a fresh virtual machine. Common jobs: `build`, `test`, `lint`, `deploy` | Like a Figma plugin task — each plugin runs in isolation with its own context |
@@ -495,10 +496,48 @@ git push origin main
 
 ### Step 8 — Write the CI Workflow
 
-GitHub Actions reads YAML files in `.github/workflows/` and runs them automatically on the triggers you define. You're creating one workflow that runs on every push and pull request — catching broken builds and type errors before they reach production.
+GitHub Actions reads YAML files in `.github/workflows/` and runs them automatically on the triggers you define. A complete CI workflow isn't just a build check — it's a four-layer regression defence that catches different classes of problems at different speeds, with each layer gating the next.
+
+**The four layers of regression protection:**
+
+| Layer | What it catches | Speed | When it runs |
+|---|---|---|---|
+| **1 — TypeScript + ESLint** | Type errors, unused variables, bad imports, code quality issues | ~1 min | First — if this fails, layers 3 and 4 are skipped automatically |
+| **2 — Unit tests** | Individual functions that return wrong values; broken logic in isolation | ~1–2 min | Parallel with Layer 1 — both start immediately |
+| **3 — Production build** | Build failures that would have caused a failed Vercel deployment | ~3–4 min | Only after Layer 1 passes |
+| **4 — Playwright E2E** | Full user journeys broken by a code change — auth, chat, sharing, payments | ~5–8 min | Only after Layer 3 passes |
+
+> **Why this order matters:** a TypeScript error or ESLint failure will always fail the build anyway — catching it in 60 seconds saves you waiting 8 minutes for Playwright to run first. A single type error stops the chain immediately. Layer 3 (integration tests against a real database) requires a test Supabase project in CI — this is added when you set up the staging environment (Stretch 6) or in a later week.
+
+**First — update `playwright.config.ts` to start the server in CI**
+
+Playwright needs a running Next.js server to run tests against. Locally you start `npm run dev` first. In CI there's no one to do that — Playwright needs to start the server itself using the pre-built app. Add a `webServer` block to your Playwright config:
 
 Ask Claude Code:
-> *"Create `.github/workflows/ci.yml` — the GitHub Actions CI workflow for AgentForge. Here's exactly what it should do:*
+> *"Update `playwright.config.ts` to add a `webServer` block so Playwright starts the Next.js server automatically before running tests — both in CI and optionally locally:*
+>
+> ```typescript
+> webServer: {
+>   command: 'npm run start',   // 'npm run start' serves the pre-built .next/ folder; requires npm run build first
+>   url: 'http://localhost:3000',
+>   reuseExistingServer: !process.env.CI,
+>   // process.env.CI is set to 'true' automatically by GitHub Actions — so in CI, always start fresh;
+>   // locally, if a dev server is already running on :3000, reuse it instead of starting another
+>   timeout: 120 * 1000,   // wait up to 120 seconds for the server to be ready before failing
+> },
+> ```
+>
+> *Confirm `testDir` is still `'e2e'` and `use.baseURL` is `'http://localhost:3000'`.*
+>
+> *After building, verify by testing:*
+> - *Happy path: stop your dev server → run `npm run build && npx playwright test` — Playwright starts the production server automatically using `npm start`, runs the tests, then stops the server. No manual `npm run dev` needed.*
+> - *Failure path: if Playwright times out with "browserType.launch: Executable doesn't exist at ...", the Chromium browser binary is missing — run `npx playwright install chromium` to install it, then retry*
+> *Do not mark complete until both pass."*
+
+**Now write the four-layer CI workflow:**
+
+Ask Claude Code:
+> *"Create `.github/workflows/ci.yml` — the GitHub Actions CI workflow for AgentForge. This implements four regression layers as separate jobs. Each job runs on a fresh Ubuntu virtual machine (a temporary Linux computer GitHub spins up for each run and deletes when done). Write the exact YAML below:*
 >
 > ```yaml
 > name: CI
@@ -510,24 +549,73 @@ Ask Claude Code:
 >     branches: [main]
 >
 > jobs:
->   build-and-check:
+>
+>   # ── Layer 1: TypeScript check + ESLint ──────────────────────────────────────
+>   # Fastest job (~1 min). No 'needs' means it starts immediately on every push.
+>   # If this fails, the build job (Layer 3) and e2e job (Layer 4) are skipped.
+>   type-check-and-lint:
 >     runs-on: ubuntu-latest
 >     steps:
->       - name: Checkout code
->         uses: actions/checkout@v4
+>       - uses: actions/checkout@v4
+>         # checkout downloads the repo code onto the runner
+>       - uses: actions/setup-node@v4
+>         with:
+>           node-version: '20'
+>           cache: 'npm'   # caches node_modules between runs so npm ci is faster on repeat pushes
+>       - run: npm ci
+>         # npm ci = 'clean install' — installs exact versions from package-lock.json.
+>         # Faster and more reliable than npm install in automated environments.
+>       - name: TypeScript check
+>         run: npx tsc --noEmit
+>         # --noEmit = check for type errors without generating output files
+>       - name: ESLint
+>         run: npx eslint . --ext .ts,.tsx --max-warnings 0
+>         # --ext .ts,.tsx = only lint TypeScript files
+>         # --max-warnings 0 = treat warnings as errors — nothing silently slips through
 >
->       - name: Setup Node.js
->         uses: actions/setup-node@v4
+>   # ── Layer 2: Unit tests ─────────────────────────────────────────────────────
+>   # Fast (~1–2 min). No 'needs' — runs in parallel with Layer 1 (both start at the same time).
+>   unit-tests:
+>     runs-on: ubuntu-latest
+>     steps:
+>       - uses: actions/checkout@v4
+>       - uses: actions/setup-node@v4
 >         with:
 >           node-version: '20'
 >           cache: 'npm'
+>       - run: npm ci
+>       - name: Run unit tests
+>         if: ${{ hashFiles('vitest.config.ts') != '' }}
+>         # only run if vitest.config.ts exists — safe guard until unit tests are written
+>         run: npm test
+>         env:
+>           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+>           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+>           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+>           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+>           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+>           STRIPE_PRO_PRICE_ID: ${{ secrets.STRIPE_PRO_PRICE_ID }}
+>           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+>           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+>           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+>           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+>           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 >
->       - name: Install dependencies
->         run: npm ci
->
->       - name: TypeScript check
->         run: npx tsc --noEmit
->
+>   # ── Layer 3: Production build ───────────────────────────────────────────────
+>   # Medium (~3–4 min). 'needs: type-check-and-lint' means it waits for Layer 1 to pass first.
+>   # If the build fails here, it would have failed on Vercel too — better to catch it in CI first.
+>   # Uploads the build output as an artifact so Layer 4 can download it instead of rebuilding.
+>   build:
+>     runs-on: ubuntu-latest
+>     needs: type-check-and-lint
+>     # 'needs' = do not start this job until the listed job passes
+>     steps:
+>       - uses: actions/checkout@v4
+>       - uses: actions/setup-node@v4
+>         with:
+>           node-version: '20'
+>           cache: 'npm'
+>       - run: npm ci
 >       - name: Build
 >         run: npm run build
 >         env:
@@ -542,33 +630,80 @@ Ask Claude Code:
 >           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
 >           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
 >           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+>           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+>           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+>       - name: Upload build output
+>         uses: actions/upload-artifact@v4
+>         # upload-artifact saves the .next/ folder so Layer 4 can download it
+>         # without rebuilding — saves 3–4 minutes on each CI run
+>         with:
+>           name: next-build
+>           path: .next/
+>           retention-days: 1   # delete after 1 day — these are temporary build artefacts
 >
->       - name: Run tests
->         if: ${{ hashFiles('vitest.config.ts') != '' }}
->         run: npm test
+>   # ── Layer 4: Playwright E2E ─────────────────────────────────────────────────
+>   # Slowest (~5–8 min). 'needs: build' means it only starts after Layer 3 passes.
+>   # Downloads the pre-built app, installs Chromium, starts the server, and runs
+>   # full user journey tests. Uploads the test report on failure for debugging.
+>   e2e:
+>     runs-on: ubuntu-latest
+>     needs: build
+>     steps:
+>       - uses: actions/checkout@v4
+>       - uses: actions/setup-node@v4
+>         with:
+>           node-version: '20'
+>           cache: 'npm'
+>       - run: npm ci
+>       - name: Download build output
+>         uses: actions/download-artifact@v4
+>         with:
+>           name: next-build
+>           path: .next/
+>       - name: Install Playwright browsers
+>         run: npx playwright install --with-deps chromium
+>         # --with-deps = also installs system libraries Playwright needs (fonts, codecs)
+>         # chromium only — no Firefox or Safari in CI keeps runtime under 8 min
+>       - name: Run E2E tests
+>         run: npx playwright test
 >         env:
 >           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
 >           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+>           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 >           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+>           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+>           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+>           STRIPE_PRO_PRICE_ID: ${{ secrets.STRIPE_PRO_PRICE_ID }}
+>           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+>           NEXT_PUBLIC_APP_URL: http://localhost:3000
+>           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+>           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+>           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+>           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+>           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+>       - name: Upload Playwright report on failure
+>         uses: actions/upload-artifact@v4
+>         if: failure()
+>         # if: failure() = only upload when tests fail — no point storing 50MB reports for green runs
+>         with:
+>           name: playwright-report
+>           path: playwright-report/
+>           retention-days: 7   # keep for 7 days so you can inspect failing test screenshots
 > ```
 >
-> *Explain each section:*
-> - *`on: push: branches: [main]` — this workflow runs every time code is pushed to the `main` branch*
-> - *`on: pull_request: branches: [main]` — also runs when someone opens or updates a pull request targeting `main`*
-> - *`runs-on: ubuntu-latest` — GitHub spins up a fresh Ubuntu Linux virtual machine for each run*
-> - *`actions/checkout@v4` — checks out (downloads) the repository code onto the runner*
-> - *`actions/setup-node@v4` with `cache: 'npm'` — installs Node.js 20 and caches `node_modules` between runs so `npm ci` is faster on subsequent runs*
-> - *`npm ci` — installs dependencies exactly as specified in `package-lock.json` (the lock file that pins exact versions of every dependency). Faster and more deterministic than `npm install`*
-> - *`npx tsc --noEmit` — runs the TypeScript type checker without generating output files. Catches type errors that wouldn't necessarily cause a build failure*
-> - *`npm run build` — runs the full Next.js production build. If this fails, the CI job fails and the merge is blocked*
-> - *`${{ secrets.VARIABLE_NAME }}` — references a GitHub secret (an encrypted variable stored in GitHub, not in your code). You need to add these in the next step.*
-> - *`if: ${{ hashFiles('vitest.config.ts') != '' }}` — only runs tests if `vitest.config.ts` exists (a safe guard if tests aren't set up yet)*
+> *Explain the job dependency graph (the order jobs run):*
+> - *`type-check-and-lint` and `unit-tests` have no `needs` — they both start immediately in parallel*
+> - *`build` has `needs: type-check-and-lint` — it waits for Layer 1 to pass before starting*
+> - *`e2e` has `needs: build` — it only starts after the build artifact is uploaded*
+> - *If `type-check-and-lint` fails → `build` is skipped → `e2e` is automatically skipped too (shown greyed out in GitHub's Actions tab)*
+> - *This means a single type error is caught in ~1 minute without burning 8 minutes on Playwright*
+> - *`${{ secrets.VARIABLE_NAME }}` — reads from GitHub's encrypted secrets store. You set these up in Step 9.*
 >
 > *After creating the file, verify the YAML is valid by pasting it into [yaml-online-parser.appspot.com](https://yaml-online-parser.appspot.com) — confirm no parsing errors.*
 >
 > *After building, verify by testing:*
-> - *Happy path: push a small change to a branch → open a pull request to main → GitHub Actions tab shows a yellow ⏳ (running) → after 3–5 minutes, turns green ✅*
-> - *Failure path (intentional): temporarily introduce a TypeScript error in any file (`const x: string = 123`) → push to a branch → CI shows red ❌ for the TypeScript check step — the error is visible in the job log*
+> - *Happy path: push a small change to a branch → open a pull request to main → GitHub Actions tab shows 4 jobs → `type-check-and-lint` and `unit-tests` start immediately in parallel → after ~1 min both go green → `build` starts → after ~4 min goes green → `e2e` starts → after ~8 min goes green ✅ — total time ~8–10 min*
+> - *Failure path (intentional): temporarily introduce a TypeScript error in any file (`const x: string = 123`) → push to a branch → `type-check-and-lint` shows red ❌ → `build` and `e2e` are greyed out (skipped automatically) — error visible in the Layer 1 job log without waiting for E2E*
 > *Do not mark complete until both pass. Then revert the intentional error."*
 
 ---
@@ -581,19 +716,23 @@ In your GitHub repository:
 1. Go to **Settings → Secrets and variables → Actions → New repository secret**
 2. Add each variable from the `env:` block in your workflow file:
 
-| Secret name | Where to find the value |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Your `.env.local` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your `.env.local` |
-| `ANTHROPIC_API_KEY` | Your `.env.local` |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Your `.env.local` (use test key for CI) |
-| `STRIPE_SECRET_KEY` | Your `.env.local` (use test key for CI) |
-| `STRIPE_PRO_PRICE_ID` | Your `.env.local` |
-| `STRIPE_WEBHOOK_SECRET` | Your `.env.local` |
-| `NEXT_PUBLIC_APP_URL` | Your live Vercel URL |
-| `UPSTASH_REDIS_REST_URL` | Your `.env.local` |
-| `UPSTASH_REDIS_REST_TOKEN` | Your `.env.local` |
-| `SENTRY_DSN` | Your `.env.local` |
+| Secret name | Where to find the value | Used by |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your `.env.local` | Build, Unit tests, E2E |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your `.env.local` | Build, Unit tests, E2E |
+| `SUPABASE_SERVICE_ROLE_KEY` | Your `.env.local` | E2E (webhook handler needs it) |
+| `ANTHROPIC_API_KEY` | Your `.env.local` | Build, Unit tests, E2E |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Your `.env.local` (use test key `pk_test_...` for CI) | Build, E2E |
+| `STRIPE_SECRET_KEY` | Your `.env.local` (use test key `sk_test_...` for CI) | Build, E2E |
+| `STRIPE_PRO_PRICE_ID` | Your `.env.local` | Build, E2E |
+| `STRIPE_WEBHOOK_SECRET` | Your `.env.local` | Build, E2E |
+| `NEXT_PUBLIC_APP_URL` | Your live Vercel URL (e.g. `https://agentforge-five.vercel.app`) | Build |
+| `UPSTASH_REDIS_REST_URL` | Your `.env.local` | Build, Unit tests, E2E |
+| `UPSTASH_REDIS_REST_TOKEN` | Your `.env.local` | Build, Unit tests, E2E |
+| `SENTRY_DSN` | Your `.env.local` | Build, E2E |
+| `TAVILY_API_KEY` | Your `.env.local` | Build, E2E (agent web search tool) |
+| `GOOGLE_DRIVE_API_KEY` | Your `.env.local` | Build (agent file tool) |
+| `RESEND_API_KEY` | Your `.env.local` | Build, E2E (email notifications) |
 
 > ⚠️ GitHub secrets are write-only — once saved, you cannot read them back through the UI. If you need to update one, just create a new secret with the same name.
 
@@ -618,11 +757,12 @@ Ask Claude Code:
 
 | Test | Expected result |
 |---|---|
-| Push a branch and open a PR to `main` | GitHub Actions tab shows the `CI` workflow running |
-| Workflow completes with no code changes | Green ✅ — TypeScript check, build, and tests all pass |
-| Introduce a deliberate TypeScript error and push | Red ❌ — TypeScript check step fails with the error visible in the log |
-| Fix the error and push | Green ✅ — CI passes again |
-| Merge the PR to `main` | Vercel automatically deploys the new version — live URL updates |
+| Push a branch and open a PR to `main` | GitHub Actions tab shows 4 jobs: `type-check-and-lint` and `unit-tests` start immediately in parallel |
+| All 4 jobs complete | Green ✅ across all layers — TypeScript check, ESLint, build, and E2E pass |
+| Introduce a deliberate TypeScript error (`const x: string = 123`) and push | `type-check-and-lint` shows red ❌ — `build` and `e2e` are greyed out (skipped) — error visible in Layer 1 log within ~1 min |
+| Fix the error and push | All 4 jobs go green ✅ again |
+| Playwright report artifact visible on a failure | GitHub Actions tab → the failed run → Artifacts section shows `playwright-report` download |
+| Merge the PR to `main` | Vercel automatically deploys the merged code — live URL updates |
 
 ---
 
@@ -993,10 +1133,11 @@ Work through these top to bottom. Don't mark anything done until you've actually
 - [ ] Production Stripe webhook created pointing to live URL
 - [ ] New `STRIPE_WEBHOOK_SECRET` from production webhook added to Vercel
 - [ ] Stripe 'Send test event' returns 200 and updates Supabase
-- [ ] `.github/workflows/ci.yml` created with TypeScript check, build, and test steps
-- [ ] All CI environment variables added as GitHub Secrets
-- [ ] Pushed a PR to `main` — CI shows green ✅
-- [ ] Intentionally broke a TypeScript type — CI showed red ❌ — confirmed CI catches errors
+- [ ] `playwright.config.ts` updated with `webServer` block — Playwright starts server automatically in CI
+- [ ] `.github/workflows/ci.yml` created with all 4 layers: TypeScript + ESLint, unit tests, build, Playwright E2E
+- [ ] All 15 CI environment variables added as GitHub Secrets (including `SUPABASE_SERVICE_ROLE_KEY`, `TAVILY_API_KEY`, `GOOGLE_DRIVE_API_KEY`, `RESEND_API_KEY`)
+- [ ] Pushed a PR to `main` — all 4 CI jobs run and show green ✅
+- [ ] Intentionally broke a TypeScript type — `type-check-and-lint` showed red ❌ — `build` and `e2e` were automatically skipped
 - [ ] Full production smoke test completed: auth, create agent, chat, share, clone, Stripe checkout
 - [ ] All smoke test failures identified and fixed
 - [ ] Sentry dashboard shows events captured from the smoke test session
@@ -1021,8 +1162,9 @@ Run these specific tests before closing out the week.
 | Share page on live URL (incognito) | Agent name, capabilities, and chat load without authentication |
 | Stripe test checkout on live URL | Checkout opens, test card `4242 4242 4242 4242` completes, `subscriptions.tier = 'pro'` |
 | Stripe 'Send test event' from Stripe dashboard | Vercel function returns 200; Supabase updated |
-| GitHub PR CI check | `build-and-check` job shows green ✅ |
-| Deliberate TypeScript error pushed to a branch | CI shows red ❌ — error message visible in job log |
+| GitHub PR CI check | All 4 jobs (`type-check-and-lint`, `unit-tests`, `build`, `e2e`) show green ✅ |
+| Deliberate TypeScript error pushed to a branch | `type-check-and-lint` shows red ❌ — `build` and `e2e` are greyed out (skipped) |
+| Playwright E2E in CI | `e2e` job passes — test report visible in Artifacts if it fails |
 | Navigate to `/this-does-not-exist` on live URL | Custom 404 page with AgentForge branding (stretch) |
 | Sentry dashboard after smoke test | At least one error event captured — readable stack trace in TypeScript |
 | Vercel deployment after merging a PR | Live URL updates automatically — no manual deploy step needed |
