@@ -5,6 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import HashTokenHandler from "@/components/auth/HashTokenHandler";
 import { createClient } from "@/lib/supabase/server";
+import { Analytics } from "@vercel/analytics/react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,6 +42,7 @@ export default async function RootLayout({
             {children}
           </main>
           <Footer />
+          <Analytics />
         </body>
     </html>
   );
