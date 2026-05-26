@@ -7,12 +7,10 @@ import { Button } from '@/components/ui/button'
 
 export default function LoginPage() {
   const [state, action, pending] = useActionState(login, undefined)
-  const [linkExpired, setLinkExpired] = useState(false)
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    setLinkExpired(params.get('error') === 'link-expired')
-  }, [])
+  const [linkExpired] = useState(() =>
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('error') === 'link-expired'
+  )
 
   useEffect(() => {
     if (state && 'success' in state) {

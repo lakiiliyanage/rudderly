@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, startTransition, type KeyboardEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Menu } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -126,13 +126,13 @@ export default function ChatPanel({
         loadedConversationRef.current = null
         conversationIdRef.current     = null
       }
-      setIsLoading(false)
+      startTransition(() => setIsLoading(false))
       return
     }
 
     // Send handler already put this conversation's messages into state — skip.
     if (conversationId === loadedConversationRef.current) {
-      setIsLoading(false)
+      startTransition(() => setIsLoading(false))
       return
     }
 
@@ -392,7 +392,7 @@ export default function ChatPanel({
   function toggleSources(index: number) {
     setExpandedSources(prev => {
       const next = new Set(prev)
-      next.has(index) ? next.delete(index) : next.add(index)
+      if (next.has(index)) { next.delete(index) } else { next.add(index) }
       return next
     })
   }

@@ -13,7 +13,7 @@ async function check(
   const ok = predicate(actual)
   console.log(`${ok ? 'PASS' : 'FAIL'} — ${label}`)
   if (!ok) console.log(`       got: ${JSON.stringify(actual)}`)
-  ok ? passed++ : failed++
+  if (ok) { passed++ } else { failed++ }
 }
 
 async function main() {

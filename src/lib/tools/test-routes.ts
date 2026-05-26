@@ -18,7 +18,7 @@ let failed = 0
 function check(label: string, ok: boolean, detail?: string) {
   console.log(`${ok ? 'PASS' : 'FAIL'} — ${label}`)
   if (!ok && detail) console.log(`       ${detail}`)
-  ok ? passed++ : failed++
+  if (ok) { passed++ } else { failed++ }
 }
 
 // @supabase/ssr reads the auth cookie as "base64-<base64url(JSON.stringify(session))>".

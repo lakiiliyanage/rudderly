@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, startTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Progress } from '@/components/ui/progress'
@@ -156,7 +156,7 @@ export default function AgentWizard({
     if (isEditing) return
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
-      if (raw) setDraft(JSON.parse(raw) as Draft)
+      if (raw) startTransition(() => setDraft(JSON.parse(raw) as Draft))
     } catch {
       localStorage.removeItem(DRAFT_KEY)
     }

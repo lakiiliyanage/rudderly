@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Share2 } from 'lucide-react'
 import {
   Dialog,
@@ -25,9 +25,7 @@ export default function ShareDialog({
   const [slug,     setSlug]     = useState(initialSlug)
   const [loading,  setLoading]  = useState(false)
   const [copied,   setCopied]   = useState(false)
-  const [origin,   setOrigin]   = useState('')
-
-  useEffect(() => { setOrigin(window.location.origin) }, [])
+  const [origin] = useState(() => typeof window !== 'undefined' ? window.location.origin : '')
 
   const publicUrl = slug
     ? (origin ? `${origin}/share/${slug}` : `/share/${slug}`)

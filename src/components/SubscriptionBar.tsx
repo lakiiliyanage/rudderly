@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState, startTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSubscription } from '@/hooks/useSubscription'
 
@@ -15,7 +15,7 @@ function SubscriptionBarInner() {
   // Show success toast when redirected back from Stripe with ?upgraded=true
   useEffect(() => {
     if (searchParams.get('upgraded') === 'true') {
-      setToast('Welcome to Pro! Your account has been upgraded.')
+      startTransition(() => setToast('Welcome to Pro! Your account has been upgraded.'))
       router.replace('/dashboard', { scroll: false })
     }
   }, [searchParams, router])
