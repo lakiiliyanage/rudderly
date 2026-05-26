@@ -92,6 +92,9 @@ jobs:
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Verify build output exists
+        run: ls -la .next/ && echo "Build output found" || (echo "ERROR — .next/ missing or empty" && exit 1)
       - name: Upload build output
         uses: actions/upload-artifact@v4
         # upload-artifact saves the .next/ folder so Layer 4 can download it
