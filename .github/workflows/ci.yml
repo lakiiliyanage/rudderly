@@ -102,6 +102,7 @@ jobs:
         with:
           name: next-build
           path: .next/
+          include-hidden-files: true
           retention-days: 1   # delete after 1 day — these are temporary build artefacts
 
   # ── Layer 4: Playwright E2E ─────────────────────────────────────────────────
