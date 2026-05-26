@@ -31,7 +31,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run start',   // serves the pre-built .next/ folder; requires npm run build first
     url: 'http://localhost:3000',
     // Reuse an already-running dev server locally; always start fresh in CI.
     reuseExistingServer: !process.env.CI,
