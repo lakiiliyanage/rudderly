@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import type { AgentConfig } from '@/lib/types/agent'
 
-const DRAFT_KEY = 'agentforge_draft'
+const DRAFT_KEY = 'rudderly_draft'
 
 interface Draft {
   agentConfig:      AgentConfig
@@ -315,7 +315,7 @@ export default function AgentWizard({
           <span className="flex-1">
             {agentLimitToast.message}{' '}
             {agentLimitToast.cta === 'enterprise' ? (
-              <a href="mailto:liyanage.lakii@gmail.com?subject=AgentForge Enterprise Enquiry" className="text-purple-400 hover:text-purple-300 font-medium underline underline-offset-2">
+              <a href="mailto:liyanage.lakii@gmail.com?subject=Rudderly Enterprise Enquiry" className="text-purple-400 hover:text-purple-300 font-medium underline underline-offset-2">
                 Contact us for Enterprise →
               </a>
             ) : (

@@ -6,7 +6,7 @@ import ShareChatPanel from './ShareChatPanel'
 import CloneButton from './CloneButton'
 import type { AgentConfig } from '@/lib/types/agent'
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://agentforge.vercel.app'
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://rudderly.vercel.app'
 
 interface SharePageProps {
   params: Promise<{ slug: string }>
@@ -24,13 +24,13 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
     .single()
 
   if (!agent) {
-    return { title: 'Agent not found | AgentForge' }
+    return { title: 'Agent not found | Rudderly' }
   }
 
-  const title       = `${agent.name} | AgentForge`
-  const ogTitle     = `${agent.name} — AI Agent on AgentForge`
-  const description = agent.description || 'Chat with this AI agent on AgentForge'
-  const ogDesc      = agent.description || 'Try this AI agent built with AgentForge'
+  const title       = `${agent.name} | Rudderly`
+  const ogTitle     = `${agent.name} — AI Agent on Rudderly`
+  const description = agent.description || 'Chat with this AI agent on Rudderly'
+  const ogDesc      = agent.description || 'Try this AI agent built with Rudderly'
 
   return {
     title,
@@ -80,7 +80,7 @@ export default async function SharePage({ params }: SharePageProps) {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
-          Go to AgentForge
+          Go to Rudderly
         </Link>
       </div>
     )
@@ -103,7 +103,7 @@ export default async function SharePage({ params }: SharePageProps) {
       {/* ── Shared-by banner ── */}
       <div className="flex items-center gap-2 mb-6 text-xs text-gray-500">
         <span className="w-5 h-5 bg-violet-600 rounded-md flex items-center justify-center text-[10px] shrink-0">⚡</span>
-        <span>Shared via <span className="text-gray-400">AgentForge</span></span>
+        <span>Shared via <span className="text-gray-400">Rudderly</span></span>
       </div>
 
       {/* ── Agent header ── */}

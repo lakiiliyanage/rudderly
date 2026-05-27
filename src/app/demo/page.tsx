@@ -16,7 +16,7 @@ export default function DemoPage() {
       <div className="max-w-3xl mx-auto px-6 py-16">
         <h1 className="text-2xl font-bold mb-2">Button Component</h1>
         <p className="text-gray-400 text-sm mb-12">
-          All variants, sizes, and states — for use across AgentForge.
+          All variants, sizes, and states — for use across Rudderly.
         </p>
 
         <Section title="Variants">
@@ -45,7 +45,7 @@ export default function DemoPage() {
           <Button asChild variant="ghost"><Link href="/auth/signup">Sign Up</Link></Button>
         </Section>
 
-        <Section title="Real AgentForge usage">
+        <Section title="Real Rudderly usage">
           <Button asChild size="lg"><Link href="/auth/signup">Get Started Free</Link></Button>
           <Button variant="secondary" size="lg">View on GitHub</Button>
           <Button variant="ghost" size="sm">Cancel</Button>

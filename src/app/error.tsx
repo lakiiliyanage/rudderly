@@ -23,7 +23,7 @@ export default function Error({
         <span className="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center text-sm">
           ⚡
         </span>
-        <span className="font-semibold text-white">AgentForge</span>
+        <span className="font-semibold text-white">Rudderly</span>
       </div>
 
       {/* Icon */}

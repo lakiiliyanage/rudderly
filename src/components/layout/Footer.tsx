@@ -6,9 +6,9 @@ const productLinks = [
 ]
 
 const openSourceLinks = [
-  { label: "GitHub", href: "https://github.com/lakiiliyanage/agentforge", external: true },
-  { label: "Contributing", href: "https://github.com/lakiiliyanage/agentforge/blob/main/CONTRIBUTING.md", external: true },
-  { label: "Changelog", href: "https://github.com/lakiiliyanage/agentforge/releases", external: true },
+  { label: "GitHub", href: "https://github.com/lakiiliyanage/rudderly", external: true },
+  { label: "Contributing", href: "https://github.com/lakiiliyanage/rudderly/blob/main/CONTRIBUTING.md", external: true },
+  { label: "Changelog", href: "https://github.com/lakiiliyanage/rudderly/releases", external: true },
 ]
 
 export default function Footer() {
@@ -27,7 +27,7 @@ export default function Footer() {
               <span className="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center text-sm">
                 ⚡
               </span>
-              <span className="font-semibold text-white">AgentForge</span>
+              <span className="font-semibold text-white">Rudderly</span>
             </Link>
             <p className="text-sm text-gray-400 leading-relaxed">
               The visual, no-code builder for creating and sharing AI agents — no engineering background required.
@@ -87,7 +87,7 @@ export default function Footer() {
         {/* pt-6 — breathing room above the bottom row */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-gray-600">
-            © {new Date().getFullYear()} AgentForge. MIT Licence — open source forever.
+            © {new Date().getFullYear()} Rudderly. MIT Licence — open source forever.
           </p>
           <p className="text-xs text-gray-600 flex items-center gap-1.5">
             Built with

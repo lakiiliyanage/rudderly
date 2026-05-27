@@ -63,7 +63,7 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const email    = `test-routes-${Date.now()}@agentforge.test`
+  const email    = `test-routes-${Date.now()}@rudderly.test`
   const password = 'TestPassword123!'
 
   const { data: { user }, error: createErr } = await admin.auth.admin.createUser({

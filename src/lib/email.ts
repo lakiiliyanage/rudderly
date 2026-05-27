@@ -17,7 +17,7 @@ export async function sendWelcomeEmail(to: string, name?: string): Promise<void>
     const result = await getResend().emails.send({
       from: 'onboarding@resend.dev',
       to,
-      subject: 'Welcome to AgentForge 🎉',
+      subject: 'Welcome to Rudderly 🎉',
       html: `<p>${greeting} — you're in! Create your first AI agent: <a href="${dashboardUrl}">${dashboardUrl}</a>. Questions? Reply to this email.</p>`,
     })
     console.log('[EMAIL] Resend result:', JSON.stringify(result))
@@ -31,7 +31,7 @@ export async function sendUpgradeEmail(to: string): Promise<void> {
     await getResend().emails.send({
       from: 'onboarding@resend.dev',
       to,
-      subject: 'You\'re on AgentForge Pro ✨',
+      subject: 'You\'re on Rudderly Pro ✨',
       html: `<p>Thanks for upgrading! Unlimited agents and messages are now unlocked. Manage your subscription any time from your dashboard.</p>`,
     })
   } catch (err) {

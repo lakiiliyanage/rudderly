@@ -57,7 +57,7 @@ export default function Navbar({ initialLoggedIn = false }: { initialLoggedIn?: 
           <span className="w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center text-sm">
             ⚡
           </span>
-          AgentForge
+          Rudderly
         </Link>
 
         {/* ── Nav links + CTA ── */}
@@ -83,7 +83,7 @@ export default function Navbar({ initialLoggedIn = false }: { initialLoggedIn?: 
           {/* GitHub — external link, opens in new tab */}
           {/* rel="noopener noreferrer" is a security best practice for external links */}
           <a
-            href="https://github.com/lakiiliyanage/agentforge"
+            href="https://github.com/lakiiliyanage/rudderly"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-1.5"

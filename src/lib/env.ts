@@ -75,7 +75,7 @@ if (!result.success) {
     .join('\n')
 
   throw new Error(
-    `\n[AgentForge] Missing or invalid environment variables:\n${missing}\n\nFix these in .env.local and restart the dev server.\n`
+    `\n[Rudderly] Missing or invalid environment variables:\n${missing}\n\nFix these in .env.local and restart the dev server.\n`
   )
 }
 

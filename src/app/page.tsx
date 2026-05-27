@@ -103,7 +103,7 @@ export default function HomePage() {
       {/* ── Footer ── */}
       <footer className="border-t border-gray-800/60">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-          <span className="text-gray-500 text-sm">AgentForge</span>
+          <span className="text-gray-500 text-sm">Rudderly</span>
           <span className="text-gray-600 text-sm">MIT Licence · Open Source</span>
         </div>
       </footer>
