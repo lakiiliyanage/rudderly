@@ -40,7 +40,7 @@ export default async function ProfilePage() {
             </div>
             <div className="text-center">
               <p className="text-white font-semibold">{user.email}</p>
-              <p className="text-gray-500 text-xs mt-0.5">AgentForge account</p>
+              <p className="text-gray-500 text-xs mt-0.5">Rudderly account</p>
             </div>
           </div>
 

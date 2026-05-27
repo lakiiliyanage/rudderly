@@ -20,17 +20,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentForge — Build AI Agents Without Code",
+  title: "Rudderly — Build AI Agents Without Code",
   description: "The visual, no-code builder for non-developers. Create, configure, and share AI agents in minutes.",
   openGraph: {
-    title: "AgentForge — Build AI Agents Without Code",
+    title: "Rudderly — Build AI Agents Without Code",
     description: "The visual, no-code builder for non-developers. Create, configure, and share AI agents in minutes.",
     type: "website",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AgentForge — Build AI Agents Without Code",
+    title: "Rudderly — Build AI Agents Without Code",
     description: "The visual, no-code builder for non-developers. Create, configure, and share AI agents in minutes.",
   },
   robots: {

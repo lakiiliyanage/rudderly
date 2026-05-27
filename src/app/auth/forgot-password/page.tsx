@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
             <span className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center text-lg shadow-lg shadow-violet-900/40">
               ⚡
             </span>
-            <span className="text-white font-semibold text-lg tracking-tight">AgentForge</span>
+            <span className="text-white font-semibold text-lg tracking-tight">Rudderly</span>
           </div>
 
           {showExpiredBanner && (

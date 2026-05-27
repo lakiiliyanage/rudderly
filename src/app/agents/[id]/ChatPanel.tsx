@@ -595,7 +595,7 @@ export default function ChatPanel({
               <p className="text-sm font-semibold text-white mb-1">Pro limit reached</p>
               <p className="text-xs text-gray-400 mb-4 leading-relaxed">{chatError.message}</p>
               <a
-                href="mailto:liyanage.lakii@gmail.com?subject=AgentForge Enterprise"
+                href="mailto:liyanage.lakii@gmail.com?subject=Rudderly Enterprise"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg transition-all active:scale-95"
               >
                 Contact us for Enterprise →

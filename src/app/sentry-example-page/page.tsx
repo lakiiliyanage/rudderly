@@ -53,7 +53,7 @@ export default function Page() {
           <a
             target="_blank"
             rel="noopener"
-            href="https://agentforge.sentry.io/issues/?project=4511450936180816"
+            href="https://rudderly.sentry.io/issues/?project=4511450936180816"
           >
             Issues Page
           </a>
