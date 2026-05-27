@@ -36,7 +36,7 @@ This is also the week Git goes from "confusing version control thing" to second 
 |---------|------------|-----------------|
 | Git branches | Parallel versions of your code | Safe experimentation without breaking what works |
 | Git commits | Named save snapshots | Every state of your app is recoverable |
-| Pull requests | Proposed code changes for review | How teams (and open-source contributors) collaborate |
+| Pull requests | Proposed code changes for review | How teams collaborate before merging code |
 | Next.js scaffold | The skeleton of your full app | All 12 weeks of building happen inside this structure |
 | App Router | Next.js routing system (file = URL) | How your pages connect to each other |
 | `.env.local` | Environment variable file | Keeps API keys out of your public code |
@@ -166,9 +166,9 @@ Check your history after:
 git log --oneline
 ```
 
-You'll see every commit in a single clean line each. This is what contributors will see when they evaluate your repo in Week 9 — a readable history is a sign of a professional project.
+You'll see every commit in a single clean line each. A readable history is a sign of a professional project.
 
-> **Pull Requests (PRs):** On GitHub, instead of merging locally like above, teams often use Pull Requests — you push your branch to GitHub, then open a PR in the browser where teammates can review it before it merges. This is how open-source collaboration works, and it's what you'll use when AgentForge has contributors in Week 9.
+> **Pull Requests (PRs):** On GitHub, instead of merging locally like above, teams often use Pull Requests — you push your branch to GitHub, then open a PR in the browser where teammates can review it before it merges. This is the standard team workflow and what you'll use when working with collaborators in later weeks.
 
 ---
 
@@ -282,7 +282,7 @@ Ask Claude Code:
 
 Ask Claude Code:
 
-> *"Build a `Footer` component at `src/components/layout/Footer.tsx`. It should show: the AgentForge name and a one-line description, links grouped into two columns — Product (Dashboard, Explore, Pricing) and Open Source (GitHub, Contributing, Changelog) — and a bottom row with copyright text and 'Built with Claude API'. Dark background, clean layout."*
+> *"Build a `Footer` component at `src/components/layout/Footer.tsx`. It should show: the Rudderly name and a one-line description, links grouped into two columns — Product (Dashboard, Explore, Pricing) and Company (Changelog, Feedback, Press) — and a bottom row with copyright text and 'Built with Claude API'. Dark background, clean layout."*
 
 ### Task 13 — Wire Them Into the Layout
 
@@ -487,17 +487,17 @@ Find any layout issues (text overflowing, buttons too cramped, cards stacking ba
 
 ---
 
-## What the Open-Source AI Ecosystem Looks Like From Here
+## What the AI Ecosystem Looks Like From Here
 
 Now that you're in a real Next.js project, it's worth knowing what else is out there:
 
-**LangChain.js** — An open-source framework for chaining AI calls. Think of it as a library of pre-built "blocks" for common AI patterns (search → summarise → respond). It's powerful but complex. You'll touch it in Phase 3 if you want multi-step agent chains beyond what Claude's native tool use provides. For now, Claude API alone is more than enough.
+**LangChain.js** — A framework for chaining AI calls. Think of it as a library of pre-built "blocks" for common AI patterns (search → summarise → respond). It's powerful but complex. You'll touch it in Phase 3 if you want multi-step agent chains beyond what Claude's native tool use provides. For now, Claude API alone is more than enough.
 
 **LlamaIndex** — Specialises in letting AI read *your own documents* — PDFs, Notion pages, Google Docs. Powerful for building knowledge-base agents. Not needed until well after launch.
 
-**Hugging Face** — A massive library of open-source AI models (image generation, text classification, speech recognition). When you eventually want to add features beyond language (like analysing uploaded images or generating thumbnails for agents), this is where you'll look.
+**Hugging Face** — A massive library of AI models (image generation, text classification, speech recognition). When you eventually want to add features beyond language (like analysing uploaded images or generating thumbnails for agents), this is where you'll look.
 
-**OpenAI SDK** — Structurally almost identical to Claude API. Parameters are slightly different, but the mental model — system prompt + user messages + tool definitions — is the same. Learning Claude API deeply makes the OpenAI SDK trivial to pick up later, which matters if AgentForge eventually supports multiple AI providers.
+**OpenAI SDK** — Structurally almost identical to Claude API. Parameters are slightly different, but the mental model — system prompt + user messages + tool definitions — is the same. Learning Claude API deeply makes the OpenAI SDK trivial to pick up later, which matters if Rudderly eventually supports multiple AI providers.
 
 For now, everything you build in Weeks 6–12 uses Claude API. It's the most capable model available and the simplest to start with.
 

@@ -766,27 +766,25 @@ Ask Claude Code:
 
 ### Stretch 4 — GitHub Repository Polish (1 hr)
 
-AgentForge is almost ready to share publicly. This stretch makes the GitHub repo look professional.
+This stretch makes the private GitHub repo look professional so it's ready to share selectively with collaborators or investors.
 
 Ask Claude Code:
-> *"Draft a comprehensive `README.md` for the AgentForge project root. It should include:*
-> - *A one-line description: 'AgentForge — Build, share, and clone AI agents without writing code'*
+> *"Draft a comprehensive `README.md` for the Rudderly project root. It should include:*
+> - *A one-line description: 'Rudderly — Build, share, and deploy AI agents without writing code'*
 > - *A 'Live Demo' link placeholder (you'll fill in the Vercel URL in Week 11)*
-> - *A 'Features' section covering: visual 5-step builder, tool integrations (web search, calculator, documents), conversation history, public sharing and cloning, open-source*
+> - *A 'Features' section covering: visual 5-step builder, tool integrations (web search, calculator, documents), conversation history, public sharing and cloning*
 > - *A 'Tech Stack' table: Next.js 16 | React 19 | Tailwind CSS v4 | Supabase | Claude API | Vercel*
-> - *A 'Quick Start' section: clone repo, install dependencies (`npm install`), copy `.env.example` to `.env.local`, fill in keys, run `npm run dev`*
-> - *A 'Contributing' section: link to `CONTRIBUTING.md`*
-> - *A MIT License badge placeholder*
+> - *A 'Quick Start' section: clone repo, install dependencies (`npm install`), copy `.env.local.example` to `.env.local`, fill in keys, run `npm run dev`*
+> - *A 'Roadmap' section with 3 placeholder items for v2 features*
 >
 > *Also create:*
-> - *`.env.example` — a copy of `.env.local` with all values replaced by placeholder strings (e.g. `ANTHROPIC_API_KEY=your_anthropic_api_key_here`). This file IS committed to GitHub — it shows new contributors what variables they need without exposing real values*
-> - *`CONTRIBUTING.md` — a brief guide: how to fork, how to run locally, code style conventions, how to open a PR*
 > - *`CHANGELOG.md` — with a single entry: `## Week 9 (May 2026) — Conversation persistence, shareable agents, clone feature`*
+>
+> *Do NOT create `CONTRIBUTING.md`, `.env.example` committed to the repo, or any LICENSE file — this is a private repository.*
 >
 > *After building, verify:*
 > - *Happy path: view README.md in GitHub — headings, tables, and code blocks render correctly (you can preview this in VS Code with the built-in Markdown preview: Cmd+Shift+V)*
-> - *Verify `.env.example` does not contain any real API keys — only placeholder strings*
-> *Do not mark complete until both pass."*
+> *Do not mark complete until this passes."*
 
 ### Stretch 5 — Automated Testing Framework (1.5 hrs)
 
@@ -912,7 +910,7 @@ npx playwright test --headed
 
 ```bash
 git add -A
-git commit -m "feat: Open Graph metadata, explore gallery, view counter, README + contributing docs, automated test framework (Vitest + Playwright)"
+git commit -m "feat: Open Graph metadata, explore gallery, view counter, README + changelog, automated test framework (Vitest + Playwright)"
 ```
 
 ---

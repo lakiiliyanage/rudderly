@@ -254,7 +254,7 @@ Once launched, you'll see a `>` prompt. This is where you talk to Claude in plai
 
 > ⚠️ **Make sure you've exited Claude Code before this step.** You need to be at the regular Terminal prompt (`lakiiliyanage@Mac ~ %`). If you're still in Claude Code, press `Esc` or type `/exit` first.
 
-GitHub is where your code lives in the cloud. It's also your public portfolio — AgentForge being open source on GitHub is a key part of the plan.
+GitHub is where your code lives in the cloud. It's your version control system and the place where your private Rudderly repository is hosted.
 
 **Create a GitHub account** (if you don't have one): https://github.com
 

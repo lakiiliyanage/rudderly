@@ -2,8 +2,6 @@
 
 **AgentForge — Build, share, and clone AI agents without writing code**
 
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
-
 > Live Demo: _coming in Week 11 — Vercel URL here_
 
 ---
@@ -15,7 +13,6 @@
 - **Conversation history** — every chat is persisted; pick up any previous conversation from the sidebar
 - **Public sharing and cloning** — publish an agent to a shareable URL; visitors can clone it to their own account with one click
 - **View counter** — public agent pages show how many conversations have been started
-- **Open source** — MIT licensed; fork it, extend it, self-host it
 
 ---
 
@@ -43,9 +40,7 @@ cd agentforge
 # Install dependencies
 npm install
 
-# Set up environment variables
-cp .env.example .env.local
-# Open .env.local and fill in your keys (see .env.example for required variables)
+# Set up environment variables — create .env.local and fill in your keys
 
 # Start the development server
 npm run dev
@@ -92,21 +87,11 @@ src/
 
 ---
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to fork, run locally, and open a pull request.
-
----
-
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for a history of releases.
 
 ---
-
-## License
-
-MIT — see [LICENSE](LICENSE) for details.
 
 Built by [Lakii](https://github.com/lakiiliyanage) — UX designer learning to build in public.
 Timeline: April 2026 → July 2026

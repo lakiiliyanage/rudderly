@@ -5,9 +5,8 @@ const productLinks = [
   { label: "Explore", href: "/explore" },
 ]
 
-const openSourceLinks = [
+const companyLinks = [
   { label: "GitHub", href: "https://github.com/lakiiliyanage/rudderly", external: true },
-  { label: "Contributing", href: "https://github.com/lakiiliyanage/rudderly/blob/main/CONTRIBUTING.md", external: true },
   { label: "Changelog", href: "https://github.com/lakiiliyanage/rudderly/releases", external: true },
 ]
 
@@ -58,13 +57,13 @@ export default function Footer() {
               </ul>
             </div>
 
-            {/* Open Source column */}
+            {/* Company column */}
             <div>
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
-                Open Source
+                Company
               </h3>
               <ul className="flex flex-col gap-3">
-                {openSourceLinks.map(({ label, href }) => (
+                {companyLinks.map(({ label, href }) => (
                   <li key={href}>
                     <a
                       href={href}
@@ -87,7 +86,7 @@ export default function Footer() {
         {/* pt-6 — breathing room above the bottom row */}
         <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-gray-600">
-            © {new Date().getFullYear()} Rudderly. MIT Licence — open source forever.
+            © {new Date().getFullYear()} Rudderly. All rights reserved.
           </p>
           <p className="text-xs text-gray-600 flex items-center gap-1.5">
             Built with
