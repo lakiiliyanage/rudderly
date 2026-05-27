@@ -14,7 +14,7 @@ export default function HomePage() {
         {/* Badge */}
         <div className="inline-flex items-center gap-2 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-xs font-medium px-3 py-1.5 rounded-full mb-8">
           <span className="w-1.5 h-1.5 bg-violet-400 rounded-full" />
-          Now in Development!
+          Staging preview — connected to rudderly-staging DB
         </div>
 
         {/* Headline */}
