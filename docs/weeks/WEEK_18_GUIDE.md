@@ -240,7 +240,38 @@ git push origin fix/launch-[short-description]
 # merge to main → auto-deploys to Vercel
 ```
 
-### Step 10 — Write Your Launch Retrospective
+### Step 10 — Begin Closed Beta Outreach
+
+Now that the product is fully built and publicly launched, start personal outreach to 10–20 hand-picked early users. These aren't random signups — they're people you've chosen because they're in your target audience and will give honest feedback.
+
+**Who to invite:** non-technical people (designers, marketers, small business owners, freelancers) who represent your target users. Avoid other developers. Avoid people who will just say "looks great!"
+
+**The invite (personal email — not a mass blast):**
+
+```
+Subject: Want early access to something I built?
+
+Hey [Name],
+
+I recently launched Rudderly — a visual AI agent builder for non-developers.
+The idea: describe what an agent should do, pick its tools, and publish it
+in minutes. No code required.
+
+It's live now and I'd love your honest take. Not looking for encouragement
+— looking for what confuses you or breaks.
+
+Try it: [your-production-url]
+Feedback form: [your-production-url]/feedback
+
+Takes about 20 minutes to build your first agent.
+
+Thanks,
+[Your name]
+```
+
+Personalise the opening line for each person. As feedback arrives, use `docs/BETA_FEEDBACK.md` (created in Week 12) to track and synthesise it. See the Week 12 guide for the Claude Code synthesis prompt.
+
+### Step 11 — Write Your Launch Retrospective
 
 Create `docs/LAUNCH_RETROSPECTIVE.md`:
 
@@ -296,6 +327,8 @@ Complete these before closing Week 18.
 - [ ] Hotfix shipped for any P0 launch bugs (if applicable)
 - [ ] `docs/LAUNCH_RETROSPECTIVE.md` written and committed
 - [ ] `docs/LAUNCH_METRICS.md` updated with Day 7 numbers vs. Week 12 baseline
+- [ ] 10–20 personal beta outreach emails sent to hand-picked early users
+- [ ] `docs/BETA_FEEDBACK.md` first entries added as responses arrive
 
 ---
 

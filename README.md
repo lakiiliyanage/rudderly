@@ -1,8 +1,10 @@
-# AgentForge
+# Rudderly
 
-**AgentForge — Build, share, and clone AI agents without writing code**
+<!-- Demo GIF will be added in Week 16 after UX polish -->
 
-> Live Demo: _coming in Week 11 — Vercel URL here_
+**Rudderly — Build, share, and clone AI agents without writing code**
+
+> Live Demo: _coming soon — Vercel URL here_
 
 ---
 
@@ -20,11 +22,17 @@
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16 (App Router) + TypeScript |
+| Framework | Next.js 16.2.4 (App Router) + TypeScript |
+| UI | React 19 |
 | Styling | Tailwind CSS v4 |
 | Database + Auth | Supabase |
-| AI | Claude API (Anthropic) |
+| AI | Claude API (claude-sonnet-4-6) |
+| Payments | Stripe |
 | Deployment | Vercel |
+| Email | Resend |
+| Rate limiting + cache | Upstash Redis |
+| Error monitoring | Sentry |
+| CI/CD | GitHub Actions |
 
 ---
 
@@ -34,8 +42,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/lakiiliyanage/agentforge.git
-cd agentforge
+git clone https://github.com/lakiiliyanage/rudderly.git
+cd rudderly
 
 # Install dependencies
 npm install
@@ -61,29 +69,6 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `/share/[slug]` | Public agent page (no login required) |
 | `/auth/login` | Sign in |
 | `/auth/signup` | Create an account |
-
----
-
-## Project Structure
-
-```
-src/
-├── app/                    # Routes (Next.js App Router)
-│   ├── api/                # API routes (chat, agents, share, clone)
-│   ├── agents/
-│   │   ├── new/            # 5-step visual builder
-│   │   └── [id]/           # Agent detail + edit
-│   ├── dashboard/
-│   ├── share/[slug]/       # Public share page
-│   └── auth/
-├── components/
-│   ├── ui/                 # shadcn/ui primitives
-│   └── layout/             # Navbar, sidebar
-└── lib/
-    ├── supabase/           # Server + client + admin helpers
-    ├── tools/              # Tool definitions and runner
-    └── types/              # Shared TypeScript types
-```
 
 ---
 
