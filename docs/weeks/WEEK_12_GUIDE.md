@@ -259,7 +259,7 @@ After pushing, watch the Vercel deployment:
 
 ---
 
-## Sunday Session — Hours 6–7: Closed Beta Recruitment
+## Sunday Session — Hours 6: README & Sprint Close
 
 ### Step 8 — Update Your README
 
@@ -289,113 +289,62 @@ Ask Claude Code:
 >
 > *Write in Markdown. Keep it under 100 lines."*
 
-### Step 9 — Recruit 10–20 Closed Beta Users
+### Step 9 — Final Commit & Sprint Close
 
-The closed beta is the most important thing you do this week. Real users finding real bugs is worth more than any amount of internal testing. A closed beta of 10–20 people gives you enough signal to fix the most critical issues before the public launch — without the pressure of thousands of people watching.
+All Week 12 work is now complete. Do a final commit to capture the README update and any remaining changes.
 
-**Who to invite:**
-
-Choose people who fit one or more of these criteria:
-- Non-technical (designers, marketers, small business owners, freelancers) — your actual target users
-- Will actually try it and give you honest feedback, not just encouraging words
-- Represent diverse use cases (someone who wants a customer support bot, someone who wants a research tool, someone who wants a content writer)
-- Have enough time to spend 20 minutes building an agent and writing feedback
-
-**Avoid:** other developers (their feedback will be "make it more technical"), people who will just say "looks great!" to be kind, people who won't actually use it.
-
-**The invite email (send via Resend or Gmail — not a mass email, personal messages):**
-
-```
-Subject: Want early access to something I built?
-
-Hey [Name],
-
-I've been building a side project for the last 3 months — Rudderly, a visual AI agent builder for non-developers. The idea: you describe what an agent should do, pick its tools, and publish it in minutes. No code required.
-
-I'm doing a private beta before the public launch and I'd love your honest take. Not looking for encouragement — looking for what breaks or confuses.
-
-Live at: [your-production-url]
-Feedback form: [your-production-url]/feedback
-
-If you try it, just fill out the feedback form and let me know what you think. Takes about 20 minutes to build your first agent.
-
-Thanks,
-[Your name]
+```bash
+cd rudderly
+git add -A
+git status   # review what's staged — confirm no .env.local or secrets
+git diff --staged | grep -i "RESEND_API_KEY\|SUPABASE_SERVICE_ROLE_KEY\|sk_live\|sk_test"
+# ↑ must return nothing — empty output means no secrets staged
+git commit -m "feat: week 12 complete — changelog, press kit, feedback, waitlist, metrics baseline, README"
+git push origin feature/week12-launch
 ```
 
-**Personal message, not a template blast.** Change the opening line for each person so it feels like you actually thought about them specifically. People can smell mass emails.
+Then open a pull request on GitHub: `feature/week12-launch` → `main`. Wait for GitHub Actions CI to go green, then merge. Vercel will auto-deploy to production.
 
-**Target:** 10–20 beta users who actually try the product. More invites than that becomes noise at this stage — you can't act on 200 pieces of feedback before Week 18.
+**Post-merge verification — visit the live URL and confirm:**
+- [ ] `/changelog` loads without login
+- [ ] `/press` loads with screenshots
+- [ ] `/feedback` Tally form renders
+- [ ] Waitlist form on homepage → submit test email → green confirmation → row in Supabase `waitlist` table
+- [ ] Vercel Analytics recording page views
+- [ ] GitHub Actions all green ✅
+
+> **Beta user recruitment** has been moved to the post-Week-18 phase. The product needs UX polish (Week 15), a full template library (Week 17), and security hardening (Week 13–14) before putting it in front of real users. The beta invite email template and `docs/BETA_FEEDBACK.md` are ready and waiting — you'll use them after the public launch. See Week 18 guide for the post-launch outreach plan.
 
 ---
 
 ## Stretch Tasks
 
-### Stretch 1 — Create BETA_FEEDBACK.md
+### Stretch 1 — Populate BETA_FEEDBACK.md (post-launch)
 
-As beta responses come in from Tally, create a synthesis document. Don't wait until all responses are in — start synthesising after the first 3–5.
+> ✅ `docs/BETA_FEEDBACK.md` has already been created as an empty template. No action needed this week.
 
-Create `docs/BETA_FEEDBACK.md`:
+Once real user feedback starts arriving after the Week 18 public launch, use this Claude Code prompt to synthesise it:
 
-```markdown
-# Rudderly — Beta Feedback Synthesis
+> *"I have [N] feedback responses from my Tally form. Here they are: [paste all responses]. Please: (1) extract every distinct piece of feedback and group by theme, (2) count how many users mentioned each theme, (3) rank themes by frequency, (4) classify each as Bug / UX Confusion / Feature Request / Positive Signal. Output as a structured list I can paste into `docs/BETA_FEEDBACK.md`."*
 
-**Beta period:** [start date] → [end date]
-**Total responses:** [n]
-
-## Raw Themes (add as feedback arrives)
-
-### Bugs / Things That Broke
-- [ ] [description of bug — include which user reported it]
-
-### Confusion Points (UX Issues)
-- [ ] [what confused them and where in the flow]
-
-### Feature Requests
-- [ ] [what they wanted that didn't exist]
-
-### What Worked Well
-- [positive signals worth noting]
-
-## Synthesised Priorities (fill in after 10+ responses)
-
-### P0 — Fix Before Public Launch
-1. 
-2. 
-3. 
-
-### P1 — Address in Weeks 13–17
-1. 
-2. 
-
-### P2 — Post-Launch Backlog
-1. 
-
-## Representative Quotes
-> "..." — [beta user, anonymous]
-```
-
-Ask Claude Code to help you synthesise once you have 5+ responses:
-> *"I have [N] beta feedback responses from my Tally form. Here they are: [paste all responses]. Please: (1) extract every distinct piece of feedback and group by theme, (2) count how many users mentioned each theme, (3) rank themes by frequency, (4) classify each as Bug / UX Confusion / Feature Request / Positive Signal. Output as a structured list I can paste into my BETA_FEEDBACK.md."*
-
-### Stretch 2 — Fix the Top Beta Issue
-
-If a P0 issue emerges from early beta responses (multiple users hitting the same bug or confusion), fix it before continuing. Ship a hotfix:
+Then if a P0 bug emerges (multiple users hitting the same issue), ship a hotfix immediately:
 
 ```bash
-git checkout -b fix/beta-issue-[short-description]
+git checkout -b fix/post-launch-[short-description]
 # make the fix
 git add -A
-git commit -m "fix: [description of what you fixed based on beta feedback]"
-git push origin fix/beta-issue-[short-description]
+git commit -m "fix: [description] — reported by multiple users at launch"
+git push origin fix/post-launch-[short-description]
 # merge to main → auto-deploys to Vercel
 ```
 
-Reply personally to the beta users who reported it: "Fixed — thanks for catching that." This kind of responsiveness builds the kind of loyalty money can't buy.
+Reply personally to users who reported it: "Fixed — thanks for catching that."
 
-### Stretch 3 — Write the Post-Build Retrospective
+### Stretch 2 — Write the Post-Build Retrospective
 
-Writing down what you learned during the build cements it in memory and creates content for future blog posts. Create `docs/BUILD_RETROSPECTIVE.md`:
+> ✅ `docs/BUILD_RETROSPECTIVE.md` has already been created as an empty template. Fill it in now while the build is fresh.
+
+Writing down what you learned during the build cements it in memory and creates content for future blog posts. Open `docs/BUILD_RETROSPECTIVE.md` and fill in the sections:
 
 ```markdown
 # Rudderly — Build Retrospective (Weeks 1–12)
@@ -419,6 +368,44 @@ Writing down what you learned during the build cements it in memory and creates 
 - [what could still go wrong in Weeks 13–18]
 ```
 
+Once filled in, commit it:
+
+```bash
+git add docs/BUILD_RETROSPECTIVE.md docs/BETA_FEEDBACK.md
+git diff --staged | grep -i "RESEND_API_KEY\|SUPABASE_SERVICE_ROLE_KEY\|sk_live\|sk_test"
+# must return nothing
+git commit -m "docs: build retrospective and beta feedback template"
+git push origin feature/week12-launch
+```
+
+---
+
+## 🏁 Sprint Close
+
+Run this at the end of Week 12 before starting Week 13.
+
+```bash
+# 1. Confirm everything is merged and main is up to date
+git checkout main
+git pull origin main
+git log --oneline -5   # your week 12 commit should be at the top
+
+# 2. Confirm production is healthy
+npx tsc --noEmit       # 0 errors
+npm run build          # clean build
+
+# 3. Check Vercel — all 4 new pages live on rudderly.dev
+# /changelog · /press · /feedback · waitlist form on homepage
+
+# 4. Create your Week 13 branch
+git checkout -b feature/week13-testing
+git push -u origin feature/week13-testing
+```
+
+Then in Claude Code, run `/sprint-close` to update `CLAUDE.md` — move Week 12 to Completed Work and set Current Focus to Week 13 (Testing & Code Quality).
+
+> **Week 13 preview:** Vitest unit tests, Playwright E2E tests, GitHub Actions CI hardening, and TypeScript strict mode. The goal is a test suite that gives you confidence to ship fast without breaking things.
+
 ---
 
 ## ✅ Completion Checklist
@@ -428,16 +415,15 @@ Complete these before closing Week 12.
 - [ ] `/changelog` page live on production URL (entries up to v1.0.0-beta)
 - [ ] `/press` page live with screenshots and contact email
 - [ ] `/feedback` Tally form embedded and working (test submission confirmed in Tally dashboard)
-- [ ] Waitlist form on landing page (test email confirmed in Resend Audience dashboard)
+- [ ] Waitlist form on landing page — new email → 201 green, duplicate → 409 amber, bad email → 400 red
 - [ ] `docs/LAUNCH_METRICS.md` committed with today's baseline numbers
-- [ ] All changes pushed to `main` and deployed via Vercel CI
-- [ ] `git diff --staged | grep -i "API_KEY\|SERVICE_ROLE\|sk_live"` returns empty before commit
-- [ ] README.md updated with tech stack and placeholder for demo GIF (added Week 16)
-- [ ] 10–20 personal beta invite emails sent
-- [ ] At least 3 beta users have tried the product and submitted feedback
-- [ ] `docs/BETA_FEEDBACK.md` created and first entries added
+- [ ] README.md updated — Rudderly branding, full tech stack, demo GIF placeholder comment
+- [ ] All changes merged to `main` via PR and deployed via Vercel CI ✅
+- [ ] `git diff --staged | grep -i "API_KEY\|SERVICE_ROLE\|sk_live"` returned empty before commit
+- [ ] ✅ `docs/BETA_FEEDBACK.md` created as empty template (ready for post-launch)
+- [ ] ✅ `docs/BUILD_RETROSPECTIVE.md` created — fill in while the build is fresh
 
-> **Not on this checklist:** Hacker News post, ProductHunt submission, social media announcements, directory submissions. Those happen in Week 18 — after security testing (Week 13), payment hardening (Week 14), UX polish (Week 15), and launch content preparation (Week 16). Doing them now would waste the momentum on an unfinished product.
+> **Not on this checklist:** beta user recruitment, Hacker News post, ProductHunt submission, social media, directory submissions. Beta recruitment moves to the post-Week-18 phase — after UX polish (Week 15), templates (Week 17), and security hardening (Weeks 13–14) are complete. The product needs to be finished before real users touch it.
 
 ---
 
@@ -449,15 +435,13 @@ Complete these before closing Week 12.
 | **Pages** | Visit `/press` logged out | All sections and screenshots visible, no auth wall |
 | **Pages** | Visit `/feedback` logged out | Tally form loads inside the page, no scrollbar |
 | **Pages** | Visit `/feedback`, complete and submit the form | Response appears in Tally dashboard within 30 seconds |
-| **Waitlist** | Submit a new email on landing page | 201 response → green confirmation message → contact in Resend Audience |
-| **Waitlist** | Submit the same email a second time | 409 response → amber "Already subscribed" message (not a generic error) |
-| **Waitlist** | Submit an invalid email (e.g. `notanemail`) | 400 response → red error message before hitting Resend |
-| **Waitlist** | Submit with `RESEND_AUDIENCE_ID` env var missing | 500 error in Vercel logs — not a silent success |
+| **Waitlist** | Submit a new email on landing page | 201 → green confirmation → row in Supabase `waitlist` table → contact in Resend |
+| **Waitlist** | Submit the same email a second time | 409 → amber "Already subscribed" — Resend not called again |
+| **Waitlist** | Submit an invalid email (e.g. `notanemail`) | 400 → red error — Zod rejects before Supabase or Resend touched |
 | **Repo** | Check GitHub repository settings | Repository is set to **Private** |
-| **Repo** | Check `.gitignore` includes `.env.local` | `git ls-files .env.local` returns empty — file is not tracked |
-| **CI** | Push to `main` | GitHub Actions shows all 4 jobs green ✅ |
-| **Deploy** | Vercel dashboard after push | Deployment succeeded — no build errors |
-| **Beta** | Send beta invite → user signs up and creates an agent | Agent appears in production Supabase, feedback appears in Tally dashboard |
+| **Repo** | Run `git ls-files .env.local` | Returns empty — file is not tracked in git |
+| **CI** | Merge PR to `main` | GitHub Actions shows all jobs green ✅ |
+| **Deploy** | Vercel dashboard after merge | Production deployment succeeded — all 4 new pages load on live URL |
 | **Metrics** | Open `docs/LAUNCH_METRICS.md` | Baseline numbers filled in with today's Supabase counts and Lighthouse scores |
 
 ---
@@ -465,9 +449,9 @@ Complete these before closing Week 12.
 ## 📚 Resources
 
 - [Tally](https://tally.so) — free form builder; transparent background embed instructions are in their Help docs
-- [Resend Audiences documentation](https://resend.com/docs/api-reference/audiences/create-audience) — API reference for creating contacts
-- [Resend Audiences overview](https://resend.com/docs/dashboard/audiences/introduction) — how the mailing list feature works
-- [Vercel Analytics](https://vercel.com/docs/analytics) — track which new pages get traffic during the beta
+- [Resend Contacts API](https://resend.com/docs/api-reference/contacts/create-contact) — global contacts model (no audienceId required)
+- [Resend — Migrating from Audiences to Segments](https://resend.com/docs/dashboard/segments/migrating-from-audiences-to-segments) — explains the model change
+- [Vercel Analytics](https://vercel.com/docs/analytics) — track which new pages get traffic
 - [Lighthouse](https://developer.chrome.com/docs/lighthouse) — run from Chrome DevTools (F12 → Lighthouse tab) to get Performance, Accessibility, and SEO scores for your baseline
 
 ---
