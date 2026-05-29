@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import HashRedirect from "./HashRedirect"
+import WaitlistForm from "@/components/waitlist-form"
 
 export default function HomePage() {
   return (
@@ -40,6 +41,12 @@ export default function HomePage() {
           <Button asChild variant="secondary" size="lg">
             <Link href="#">View on GitHub</Link>
           </Button>
+        </div>
+
+        {/* Waitlist */}
+        <div className="mt-10">
+          <p className="text-sm text-gray-500 mb-4">Not ready to sign up? Join the waitlist.</p>
+          <WaitlistForm />
         </div>
       </section>
 
@@ -104,7 +111,7 @@ export default function HomePage() {
       <footer className="border-t border-gray-800/60">
         <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
           <span className="text-gray-500 text-sm">Rudderly</span>
-          <span className="text-gray-600 text-sm">MIT Licence · Open Source</span>
+          <span className="text-gray-600 text-sm">© {new Date().getFullYear()} Rudderly</span>
         </div>
       </footer>
 

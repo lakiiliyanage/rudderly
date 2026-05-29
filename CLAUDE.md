@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# AgentForge — Project Memory
+# Rudderly — Project Memory
 
 ## Completed Work
 - Weeks 1–3: Env setup, JS/TS fundamentals, Next.js scaffold with App Router + git workflow.
@@ -12,19 +12,19 @@
 - Week 9: Conversation persistence (sidebar, auto-titles, `?c=` routing, context window), public share pages (auto-slug, OG, clone, view counter), Vitest unit + Playwright E2E tests.
 - Week 10: Stripe Checkout, freemium tier enforcement (free/Pro limits + webhook), Upstash rate limiting, prompt injection defence, security audit (18 routes, all HIGH/MEDIUM fixed); stretch: Resend emails, Customer Portal, admin dashboard.
 
-## Current Focus (Week 11)
-Deploy to Vercel — production env vars, custom domain, Sentry error monitoring, GitHub Actions CI, end-to-end production smoke test.
+## Current Focus (Week 12)
+Pre-launch infrastructure — changelog page, press kit, feedback form (Tally), waitlist (Resend global contacts + Supabase waitlist table), LAUNCH_METRICS.md baseline, README update, closed beta recruitment.
 
 ## Memory Rules (Claude must always follow these)
 - Keep this CLAUDE.md under 4,000 characters total; flag if approaching limit
 - Completed Work: max 1 sentence per week
 - Never @-import week guides older than the current sprint
 - Remind me to run /sprint-close when a new sprint begins
-- 13-week plan; Week 13 = Testing & Code Quality; Week 12 is not the final week.
+- 18-week plan; Week 12 = closed beta / pre-launch infrastructure; Week 18 = public launch.
 
 ---
 
-# AgentForge — Project Stack & Version Reference
+# Rudderly — Project Stack & Version Reference
 
 Never use old patterns: `middleware.ts`, `tailwind.config.js`, `useFormState`, `anon`/`service_role` key names.
 
@@ -47,13 +47,23 @@ Never use old patterns: `middleware.ts`, `tailwind.config.js`, `useFormState`, `
 
 ## Environment Variables
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://gqqglsttnfkftsdcbcsz.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://gqqglsttnfkftsdcbcsz.supabase.co        # production
+NEXT_PUBLIC_SUPABASE_URL=https://emqkmiwrburwwtulmnfr.supabase.co        # staging
 ```
 
-## Supabase Project — CRITICAL
-- AgentForge project ID: **gqqglsttnfkftsdcbcsz** — verify before ANY MCP tool call
-- NEVER trust `list_projects`; confirm against `.env.local` first
+## Supabase Projects — CRITICAL
+Two projects exist in the Rudderly org (`ndbnugdzztjdfbizsjdv`), both `eu-central-1`:
+
+| Environment | Project name | Project ID | Vercel target |
+|---|---|---|---|
+| **Production** | Rudderly | `gqqglsttnfkftsdcbcsz` | Production deployments |
+| **Staging** | rudderly-staging | `emqkmiwrburwwtulmnfr` | Preview deployments |
+
+### Rules — follow every time:
+- **Migrations must run on BOTH projects** — staging first, then production
+- NEVER trust `list_projects` alone; confirm project ID against the environment you intend to target
 - Vampli project `zmmivcmdtttlbzqfdoyk` is unrelated — never touch it
+- When Claude Code or MCP tools ask which project, always specify explicitly — never let it default
 
 ---
 
