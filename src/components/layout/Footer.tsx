@@ -5,9 +5,10 @@ const productLinks = [
   { label: "Explore", href: "/explore" },
 ]
 
-const companyLinks = [
-  { label: "GitHub", href: "https://github.com/lakiiliyanage/rudderly", external: true },
-  { label: "Changelog", href: "https://github.com/lakiiliyanage/rudderly/releases", external: true },
+const companyLinks: { label: string; href: string; external?: boolean }[] = [
+  { label: "Changelog", href: "/changelog" },
+  { label: "Press",     href: "/press" },
+  { label: "GitHub",    href: "https://github.com/lakiiliyanage/rudderly", external: true },
 ]
 
 export default function Footer() {
@@ -63,16 +64,25 @@ export default function Footer() {
                 Company
               </h3>
               <ul className="flex flex-col gap-3">
-                {companyLinks.map(({ label, href }) => (
+                {companyLinks.map(({ label, href, external }) => (
                   <li key={href}>
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-gray-500 hover:text-white transition-colors"
-                    >
-                      {label}
-                    </a>
+                    {external ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-gray-500 hover:text-white transition-colors"
+                      >
+                        {label}
+                      </a>
+                    ) : (
+                      <Link
+                        href={href}
+                        className="text-sm text-gray-500 hover:text-white transition-colors"
+                      >
+                        {label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

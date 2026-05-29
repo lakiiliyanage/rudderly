@@ -7,9 +7,11 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 
 const navLinks = [
-  { label: "Home",      href: "/" },
-  { label: "Explore",   href: "/explore" },
-  { label: "Dashboard", href: "/dashboard" },
+  { label: "Home",       href: "/" },
+  { label: "Explore",    href: "/explore" },
+  { label: "Changelog",  href: "/changelog" },
+  { label: "Feedback",   href: "/feedback" },
+  { label: "Dashboard",  href: "/dashboard" },
 ]
 
 export default function Navbar({ initialLoggedIn = false }: { initialLoggedIn?: boolean }) {
