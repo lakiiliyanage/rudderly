@@ -1,4 +1,4 @@
-# Week 13 — Testing Foundation: Unit Tests, API Route Tests & CI Integration
+# Week 13 — Testing Foundation: Unit Tests & API Route Tests
 
 **Phase 5 — Code Quality & Security**
 **Estimated time:** 6–8 hours core · 2 hours stretch
@@ -8,13 +8,14 @@
 
 ## What You're Building This Week
 
-AgentForge now has 12 weeks of features — auth, CRUD, streaming, tool loops, payments, security hardening, and a production deploy. But every time you add something new, there's a nagging question: *did I accidentally break something that was already working?*
+Rudderly now has 12 weeks of features — auth, CRUD, streaming, tool loops, payments, security hardening, and a production deploy. But every time you add something new, there's a nagging question: *did I accidentally break something that was already working?*
 
-This week you build the answer. You'll set up **Vitest** (a fast test runner that understands your codebase) and write three layers of tests:
+This week you build the answer. You'll set up **Vitest** (a fast test runner that understands your codebase) and write two layers of tests:
 
 1. **Unit tests** for pure logic functions — the parts of your code that don't touch the database or network
 2. **API route tests** for your most critical endpoints — so you can verify POST /api/agents and DELETE /api/agents/[id] behave correctly without actually hitting Supabase
-3. **CI integration** — wiring your tests into GitHub Actions so they run automatically on every push and pull request
+
+The GitHub Actions CI pipeline was fully built in Week 11 with a 4-layer workflow. It was already waiting for Vitest — a `hashFiles('vitest.config.ts')` guard in the `unit-tests` job meant it skipped silently until now. Setting up Vitest this week activates it automatically. No new CI work needed.
 
 By the end of the week, every future feature you ship will be guarded by a test net that runs in the cloud before anything reaches production.
 
@@ -28,7 +29,7 @@ Open the project in your terminal and run these checks. Fix anything that fails 
 
 ```bash
 # Navigate to the project
-cd path/to/agentforge
+cd rudderly
 
 # Confirm TypeScript has no errors — a clean type check before adding tests
 npx tsc --noEmit
@@ -79,7 +80,7 @@ Work through this table before you start the steps. Every term will appear in th
 You'll use these codes in your API route tests. Keep this table handy when reading the test assertions below.
 
 | Code | Name | Meaning | When to use |
-|---|---|---|---|
+|------|------|---------|-------------|
 | 200 | OK | Request succeeded | Generic success |
 | 201 | Created | New resource created | After a successful INSERT (e.g. creating an agent) |
 | 400 | Bad Request | Client sent malformed or incomplete data | Missing fields, failed Zod validation |
@@ -92,7 +93,7 @@ You'll use these codes in your API route tests. Keep this table handy when readi
 
 ## HTTP Request Types Reference
 
-| Request type | Intention | Real-world analogy | Used in AgentForge |
+| Request type | Intention | Real-world analogy | Used in Rudderly |
 |---|---|---|---|
 | GET | "Give me data" | Reading a menu | Fetching agents, loading dashboard |
 | POST | "Here is new data, store it" | Placing an order | Creating an agent (`POST /api/agents`) |
@@ -126,60 +127,44 @@ Before adding anything new, understand what's already there. This step is read-o
 
 ---
 
-### Step 2 — Install and Configure Vitest
+### Step 2 — Complete the Vitest Setup
 
-This step installs Vitest and creates the configuration files that tell it how to run tests in a Next.js project.
+The audit (Step 1) confirmed that `vitest.config.ts` and the `vitest` package already exist from earlier work. What's missing is the coverage provider, two package.json scripts, and the setup file for fake env vars. This step fills those gaps — it does not recreate what's already there.
 
 > **Prompt for Claude Code:**
 >
 > `Next.js 16.2.4 / React 19 / Tailwind v4 / @supabase/ssr 0.10.2 — proxy.ts, await cookies(), no tailwind.config.js, Publishable key = NEXT_PUBLIC_SUPABASE_ANON_KEY`
 >
-> Install and configure Vitest for this Next.js 16 / React 19 project.
+> `vitest.config.ts` and `vitest` already exist in this project. Complete the setup by doing the following:
 >
-> **Install these packages as devDependencies:**
+> **1. Install missing packages:**
 > ```bash
-> npm install -D vitest @vitejs/plugin-react @vitest/coverage-v8 jsdom @testing-library/react @testing-library/jest-dom
+> npm install -D @vitest/coverage-v8 jsdom @testing-library/react @testing-library/jest-dom
 > ```
+> Do not reinstall `vitest` — it's already in devDependencies at ^4.1.6.
 >
-> **Create `vitest.config.ts`** in the project root:
+> **2. Update `vitest.config.ts`** to add coverage configuration. Read the existing file first and add a `coverage` block inside `test: {}` without changing anything else:
 > ```typescript
-> import { defineConfig } from 'vitest/config'
-> import react from '@vitejs/plugin-react'
-> import path from 'path'
->
-> export default defineConfig({
->   plugins: [react()],
->   test: {
->     environment: 'node',
->     globals: true,
->     setupFiles: ['./src/lib/__tests__/setup.ts'],
->     coverage: {
->       provider: 'v8',
->       thresholds: {
->         lines: 40,
->         functions: 40,
->         branches: 30,
->         statements: 40,
->       },
->       exclude: [
->         'src/app/**',
->         'src/lib/__tests__/**',
->         '*.config.*',
->         'node_modules/**',
->       ],
->     },
+> coverage: {
+>   provider: 'v8',
+>   thresholds: {
+>     lines: 40,
+>     functions: 40,
+>     branches: 30,
+>     statements: 40,
 >   },
->   resolve: {
->     alias: {
->       '@': path.resolve(__dirname, './src'),
->     },
->   },
-> })
+>   exclude: [
+>     'src/app/**',
+>     'src/lib/__tests__/**',
+>     '*.config.*',
+>     'node_modules/**',
+>   ],
+> },
 > ```
+> Also add `setupFiles: ['./src/lib/__tests__/setup.ts']` to the `test` block if it's not already there.
 >
-> **Create `src/lib/__tests__/setup.ts`** — this file runs before every test and sets up fake environment variables so tests don't fail with "missing env var" errors:
+> **3. Create `src/lib/__tests__/setup.ts`** — runs before every test, provides fake env vars so tests don't fail with "missing env var" errors:
 > ```typescript
-> // Test environment variables — fake values that satisfy validation without hitting real services
 > process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
 > process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
 > process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
@@ -192,31 +177,29 @@ This step installs Vitest and creates the configuration files that tell it how t
 > process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000'
 > ```
 >
-> **Add scripts to `package.json`:**
+> **4. Add two missing scripts to `package.json`** (`"test": "vitest run"` already exists — do not duplicate it):
 > ```json
-> "test": "vitest run",
 > "test:watch": "vitest",
 > "test:coverage": "vitest run --coverage"
 > ```
 >
-> After setting up, verify by:
-> - Running `npx tsc --noEmit` — must return no errors
-> - Running `npm test` — should return "No test files found" (not an error, just nothing to run yet)
-> - Running `npm run test:coverage` — should complete without crashing
+> After building, verify by testing:
+> - Happy path: `npm test` → existing tests in `slug.test.ts` and `context.test.ts` pass; `npm run test:coverage` → exits without crashing and shows a coverage table
+> - Failure path: temporarily set `lines: 99` in the coverage thresholds → `npm run test:coverage` fails with "does not meet global threshold" → revert to 40
 >
-> Do not mark complete until `npm test` runs without crashing.
+> Do not mark complete until both paths pass.
 
 ---
 
 ### Step 3 — Unit Tests for Pure Logic Functions
 
-Now write the first real tests. These three functions are "pure" — they take an input and return an output, no database or network involved. Perfect first targets.
+Two test files already exist from earlier work: `slug.test.ts` (generateBaseSlug, addUniqueSuffix) and `context.test.ts` (prepareMessagesForContext). This step adds tests for three more functions. Same pattern — pure logic, no database.
 
 > **Prompt for Claude Code:**
 >
 > `Next.js 16.2.4 / React 19 / Tailwind v4 / @supabase/ssr 0.10.2 — proxy.ts, await cookies(), no tailwind.config.js, Publishable key = NEXT_PUBLIC_SUPABASE_ANON_KEY`
 >
-> Write Vitest unit tests for three pure functions in this project. Create one test file per function in `src/lib/__tests__/`.
+> Two unit test files already exist in `src/lib/__tests__/` — `slug.test.ts` and `context.test.ts`. Add three more test files for the following functions. If a function doesn't exist under the path suggested, search the codebase for it before giving up — report back if it's genuinely missing so we can pick an alternative target.
 >
 > **File 1: `src/lib/__tests__/relativeTime.test.ts`**
 >
@@ -565,142 +548,64 @@ git commit -m "feat: add API route tests for POST and DELETE /api/agents with vi
 
 ---
 
-## Session 3 — Hours 5–6: CI Integration & Coverage
+## Session 3 — Hours 5–6: CI Verification & Coverage
 
-### Step 6 — Add Tests to GitHub Actions CI
+### Step 6 — Verify the Existing CI Picks Up Your New Tests
 
-Now wire your tests into the automated pipeline. Every push to `main` (and every pull request) will run `npm test` on GitHub's servers before anything is deployed.
+The full GitHub Actions CI workflow was built in Week 11 — it already has a `unit-tests` job. That job was written with a `hashFiles('vitest.config.ts')` guard: it only runs `npm test` if `vitest.config.ts` exists. You just created that file in Step 2. This means **the CI activation is automatic** — no new workflow file needed.
 
-> **Prompt for Claude Code:**
->
-> `Next.js 16.2.4 / React 19 / Tailwind v4 / @supabase/ssr 0.10.2 — proxy.ts, await cookies(), no tailwind.config.js, Publishable key = NEXT_PUBLIC_SUPABASE_ANON_KEY`
->
-> Add a test job to the existing GitHub Actions CI workflow.
->
-> First, check if `.github/workflows/` already has a CI file (likely `ci.yml` or `main.yml`). If it does, add a parallel `test` job alongside the existing job(s). If it doesn't exist yet, create `.github/workflows/ci.yml` from scratch.
->
-> **The test job should:**
->
-> ```yaml
-> test:
->   name: Unit & API Tests
->   runs-on: ubuntu-latest
->   steps:
->     - uses: actions/checkout@v4
->
->     - name: Set up Node.js
->       uses: actions/setup-node@v4
->       with:
->         node-version: '20'
->         cache: 'npm'
->
->     - name: Install dependencies
->       run: npm ci  # Faster than npm install — uses exact versions from package-lock.json
->
->     - name: Type check
->       run: npx tsc --noEmit  # Fails the CI if there are TypeScript type errors
->
->     - name: Run tests
->       run: npm test
->       env:
->         # All required env vars with fake test values — same as setup.ts but available to the CI runner
->         NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
->         NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
->         SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
->         ANTHROPIC_API_KEY: sk-ant-test-key
->         STRIPE_SECRET_KEY: sk_test_fake_key
->         STRIPE_WEBHOOK_SECRET: whsec_test_fake_secret
->         STRIPE_PRO_PRICE_ID: price_test_fake_id
->         UPSTASH_REDIS_REST_URL: https://test.upstash.io
->         UPSTASH_REDIS_REST_TOKEN: test-token
->         NEXT_PUBLIC_APP_URL: http://localhost:3000
-> ```
->
-> **If adding to an existing workflow file**, make the `test` job run in parallel with the existing `build` or `deploy` job — NOT as a dependency of it. This keeps CI fast.
->
-> **If creating a new workflow file from scratch**, the full file should look like:
->
-> ```yaml
-> name: CI
->
-> on:
->   push:
->     branches: [main, develop]
->   pull_request:
->     branches: [main]
->
-> jobs:
->   test:
->     name: Unit & API Tests
->     runs-on: ubuntu-latest
->     steps:
->       - uses: actions/checkout@v4
->       - name: Set up Node.js
->         uses: actions/setup-node@v4
->         with:
->           node-version: '20'
->           cache: 'npm'
->       - name: Install dependencies
->         run: npm ci
->       - name: Type check
->         run: npx tsc --noEmit
->       - name: Run tests
->         run: npm test
->         env:
->           NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
->           NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
->           SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
->           ANTHROPIC_API_KEY: sk-ant-test-key
->           STRIPE_SECRET_KEY: sk_test_fake_key
->           STRIPE_WEBHOOK_SECRET: whsec_test_fake_secret
->           STRIPE_PRO_PRICE_ID: price_test_fake_id
->           UPSTASH_REDIS_REST_URL: https://test.upstash.io
->           UPSTASH_REDIS_REST_TOKEN: test-token
->           NEXT_PUBLIC_APP_URL: http://localhost:3000
-> ```
->
-> After building, verify by testing:
-> - Happy path: Run `npm test` locally — all tests pass
-> - Failure path: Temporarily add `process.env.NONEXISTENT_CHECK = 'should-fail'` and assert `expect(process.env.NONEXISTENT_CHECK).toBe('wrong')` in any test → test fails → revert → tests pass again
->
-> Do not mark complete until both paths pass.
+Open `.github/workflows/ci.yml` and confirm the `unit-tests` job is there. It should look roughly like:
 
----
+```yaml
+unit-tests:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    - run: npm ci
+    - name: Run unit tests
+      if: ${{ hashFiles('vitest.config.ts') != '' }}
+      run: npm test
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        # ... other secrets
+```
 
-### Step 7 — Verify CI Catches Real Failures
-
-Push to GitHub and confirm the CI workflow triggers and passes. Then introduce a deliberate failure to confirm it actually catches broken code.
+Now push a branch to verify it fires:
 
 > **Prompt for Claude Code:**
 >
 > `Next.js 16.2.4 / React 19 / Tailwind v4 / @supabase/ssr 0.10.2`
 >
-> Help me verify the GitHub Actions CI workflow is working correctly.
+> The GitHub Actions CI workflow in `.github/workflows/ci.yml` already has a `unit-tests` job from Week 11. Now that `vitest.config.ts` exists, it should fire automatically. Help me verify:
 >
-> 1. Commit and push the current state (all tests passing) to the `main` or `develop` branch:
+> 1. Commit and push the current state to a new branch:
 >    ```bash
+>    git checkout -b feature/week13-tests
 >    git add -A
->    git commit -m "ci: add test job to GitHub Actions workflow"
->    git push
+>    git commit -m "feat: Vitest setup, unit tests, and API route tests"
+>    git push origin feature/week13-tests
 >    ```
+> 2. Open a pull request to `main` on GitHub. Watch the Actions tab at `https://github.com/<username>/rudderly/actions`.
+> 3. Confirm the `unit-tests` job appears and passes green ✅. If it was previously skipped (grey) because `vitest.config.ts` didn't exist, it should now show as running.
+> 4. To verify CI actually catches failures: change one assertion in `relativeTime.test.ts` to an intentionally wrong value (e.g. `toBe('just now')` → `toBe('never')`), push the change, confirm `unit-tests` shows red ❌, then revert and push again to confirm it goes green ✅.
 >
-> 2. Tell me the URL where I can watch the workflow run: `https://github.com/<username>/agentforge/actions`
+> If the `unit-tests` job is missing from the workflow entirely, open `.github/workflows/ci.yml` and show me its contents — we may need to add it. Do not create a new workflow file — only add a job to the existing one.
 >
-> 3. Once the first run passes (green ✓), introduce a deliberate failure to verify CI catches broken code:
->    - In `src/lib/__tests__/relativeTime.test.ts`, change one assertion to be intentionally wrong (e.g. `toBe('just now')` → `toBe('never')`)
->    - Commit and push
->    - Tell me what the CI run should show: the test job fails with a red ✗, deployment (if any) should not proceed
+> After building, verify by testing:
+> - Happy path: push branch → `unit-tests` CI job runs and shows green ✅
+> - Failure path: broken assertion pushed → `unit-tests` shows red ❌ → revert → green ✅ again
 >
-> 4. Revert the broken assertion, commit and push again:
->    - CI should go green again
->
-> This confirms CI is a real gate, not just decoration.
+> Do not mark complete until both paths pass.
 
-**After you see the green CI badge, your test infrastructure is real.** Every future PR will automatically run these tests before anyone merges.
+**After you see the green CI badge, your test infrastructure is fully wired.** Every future PR will automatically run these tests — no extra setup needed.
 
 ---
 
-### Step 8 — Coverage Report and Thresholds
+### Step 7 — Coverage Report and Thresholds
 
 Now check how much of your code is covered and ensure the thresholds you set in `vitest.config.ts` (40% lines/functions/statements, 30% branches) are met.
 
@@ -732,7 +637,7 @@ Now check how much of your code is covered and ensure the thresholds you set in 
 
 ---
 
-### ✅ Before You Commit — CI and Coverage
+### ✅ Before You Commit — CI Verification and Coverage
 
 All of the following must pass before committing. Ask Claude Code to run them if you haven't already:
 
@@ -741,20 +646,20 @@ All of the following must pass before committing. Ask Claude Code to run them if
 | `npm test` | All tests pass locally |
 | `npm run test:coverage` | All coverage thresholds met, exits with code 0 |
 | `npx tsc --noEmit` | No TypeScript errors |
-| Push to GitHub | CI workflow triggers automatically |
-| First CI run | All jobs show green ✓ |
-| Deliberate broken test pushed | CI job shows red ✗ |
-| Fixed test pushed | CI job shows green ✓ again |
+| Push branch to GitHub | `unit-tests` CI job fires (was previously skipped when `vitest.config.ts` didn't exist) |
+| CI `unit-tests` job | Green ✅ |
+| Deliberately broken assertion pushed | `unit-tests` CI job shows red ❌ |
+| Revert and push | `unit-tests` CI job shows green ✅ again |
 
 Do not commit until every row shows the expected result.
 
-### 💾 Commit Checkpoint — CI and Coverage Complete
+### 💾 Commit Checkpoint — CI Verification and Coverage Complete
 
-Tests are running locally, coverage thresholds are met, and GitHub Actions is enforcing both on every push. This is the testing foundation the project needed from day one.
+Tests are running locally, coverage thresholds are met, and the existing CI is now actively running your unit tests on every push.
 
 ```bash
 git add -A
-git commit -m "feat: CI test job with coverage thresholds — 40% lines/functions, 30% branches"
+git commit -m "feat: Vitest tests now active in CI — coverage thresholds 40% lines/functions, 30% branches"
 ```
 
 ---
@@ -792,7 +697,7 @@ The Stripe webhook handler (`POST /api/webhooks/stripe`) is one of the most crit
 >
 > **Write three test cases:**
 >
-> 1. **Invalid webhook signature → 400 (Bad Request)**
+> 1. **Invalid webhook signature → 400 (Bad Request — Stripe could not verify the request came from Stripe's servers)**
 >    - `stripe.webhooks.constructEvent` throws a `Stripe.errors.StripeSignatureVerificationError`
 >    - The route should return 400 without touching the database
 >
@@ -800,16 +705,16 @@ The Stripe webhook handler (`POST /api/webhooks/stripe`) is one of the most crit
 >    - `constructEvent` returns a fake event object: `{ type: 'customer.subscription.created', data: { object: { customer: 'cus_fake', items: { data: [{ price: { id: process.env.STRIPE_PRO_PRICE_ID } }] } } } }`
 >    - Mock Supabase to return a user matching that customer ID
 >    - Assert the Supabase `update` is called to set `tier = 'pro'`
->    - Route should return 200
+>    - Route should return 200 (OK)
 >
 > 3. **`customer.subscription.deleted` event → downgrades user to free**
 >    - `constructEvent` returns `{ type: 'customer.subscription.deleted', data: { object: { customer: 'cus_fake' } } }`
 >    - Assert Supabase `update` is called to set `tier = 'free'`
->    - Route should return 200
+>    - Route should return 200 (OK)
 >
 > After building, verify by testing:
 > - Happy path: `npm test` → all webhook tests pass alongside the existing tests
-> - Failure path: Remove the `constructEvent` mock so it throws an unexpected error → test for invalid signature should still pass (since any throw from constructEvent → 400), but a test expecting 200 should fail → revert and fix
+> - Failure path: Remove the `constructEvent` mock so it throws an unexpected error → the invalid-signature test should still return 400 (any throw from constructEvent → 400) → revert and fix any failures
 >
 > Do not mark complete until both paths pass.
 
@@ -817,26 +722,28 @@ The Stripe webhook handler (`POST /api/webhooks/stripe`) is one of the most crit
 
 ### Stretch 2 — Write TESTING.md
 
-Document all four layers of your testing strategy in a single file so future contributors (and future you) understand the system.
+Document your testing strategy in a single file so future contributors (and future you) understand the system.
 
 > **Prompt for Claude Code:**
 >
 > `Next.js 16.2.4 / React 19 / Tailwind v4 / @supabase/ssr 0.10.2`
 >
-> Create `docs/TESTING.md` — a clear guide to the project's testing strategy covering all four layers.
+> Create `docs/TESTING.md` — a clear guide to the project's testing strategy covering all three layers, consistent with the three-tier rule already established in CLAUDE.md.
 >
 > **Structure:**
 >
-> ## Testing Strategy — AgentForge
+> ## Testing Strategy — Rudderly
 >
-> ### Four Layers of Tests
+> ### Three Layers of Tests
 >
-> | Layer | Tool | What it tests | When to use it |
+> | Layer | Tool | What it covers | When to run |
 > |---|---|---|---|
-> | Tool logic | `npx tsx src/lib/tools/test-runner.ts` | Tests the 5 agent tools directly (no HTTP) | After changing any tool function |
-> | API routes (HTTP) | `node src/lib/tools/test-routes.ts` | Tests real HTTP responses against a live dev server | After changing any API route |
-> | Unit tests (Vitest) | `npm test` | Tests pure functions and mocked route handlers | After any logic change — runs in CI |
-> | E2E browser tests (Playwright) | `npx playwright test` | Full browser simulation from signup to agent creation | Before major releases |
+> | Tool logic | `npx tsx src/lib/tools/test-runner.ts` | Agent tool functions directly, no HTTP server needed | After changing any tool function |
+> | Unit + API mocks (Vitest) | `npm test` | Pure functions and mocked route handlers | After any logic change — runs automatically in CI |
+> | Browser flows (Playwright) | `npx playwright test` | UI behaviour Rudderly controls — limit cards, toasts, redirects, mocked API responses | Before major releases; NOT for Stripe-hosted pages or webhook round-trips |
+>
+> ### What Does NOT Go in Playwright
+> External service flows (real Stripe checkout, webhook round-trips, Stripe CLI triggers) belong in the manual checklist in each week's guide — not in automated tests. These involve third-party iframes and side processes that Playwright cannot reliably control.
 >
 > ### Running Tests Locally
 > (bash commands for each layer)
@@ -847,13 +754,14 @@ Document all four layers of your testing strategy in a single file so future con
 > ### Coverage
 > (current thresholds, where to find the report, how to interpret it)
 >
-> ### When Tests Should NOT Be Written
-> Follow this rule from the project: "Never start a dev server and poll logs waiting for browser interaction to verify logic that can be tested with tsx." If something can be tested with `tsx` directly, test it that way — not with a browser.
->
 > ### Adding New Tests
 > (guidance on which layer to add to for different kinds of changes)
 >
 > Write in plain English, not jargon. Include the design analogy: tests are the project's design system — they define what "correct" means and prevent future changes from accidentally breaking established behaviour.
+>
+> After building, verify by testing:
+> - Happy path: `cat docs/TESTING.md` → file exists with three-layer table and running instructions
+> - Failure path: N/A (this is documentation)
 
 ---
 
@@ -885,7 +793,7 @@ git commit -m "feat: week 13 complete — Vitest unit tests, API route tests wit
 
 After committing, open `CLAUDE.md` and move "Week 13" from Current Focus into Completed Work with a two-sentence summary of what shipped. Update the Current Focus to:
 
-> **Week 14: Testing & Code Quality (Part 2)** — E2E Playwright tests for the critical signup-to-first-agent flow, mutation testing to verify your test suite actually catches real bugs, and a final code quality audit before launch.
+> **Week 14: Hardened Prompt Injection Defence** — classifier-based safety layer (Haiku pre-flight call), indirect injection protection for tool outputs, structured output constraints, and red-team audit with Garak.
 
 ---
 
@@ -923,22 +831,21 @@ Go through every item. If anything is unchecked, complete it before calling the 
 - [ ] Branch coverage ≥ 30%
 - [ ] Statement coverage ≥ 40%
 
-**CI Integration**
-- [ ] `.github/workflows/ci.yml` exists (or updated) with a `test` job
-- [ ] `test` job includes `npm ci`, `npx tsc --noEmit`, and `npm test` steps
-- [ ] All required env vars are set in the CI job's `env:` block
-- [ ] Push to GitHub triggered the CI workflow
-- [ ] CI workflow shows green ✓
-- [ ] Deliberately broken test produced red ✗ in CI
-- [ ] Fixed test produced green ✓ again
+**CI Verification**
+- [ ] `.github/workflows/ci.yml` confirmed to have a `unit-tests` job (built in Week 11)
+- [ ] `hashFiles('vitest.config.ts')` guard in the job — confirms it was waiting for Vitest to be set up
+- [ ] Push to GitHub triggered `unit-tests` job to run (no longer skipped)
+- [ ] `unit-tests` CI job shows green ✅
+- [ ] Deliberately broken test produced red ❌ in CI
+- [ ] Fixed test produced green ✅ again
 
 **CLAUDE.md**
 - [ ] Week 13 moved from Current Focus into Completed Work
-- [ ] Current Focus updated to Week 14
+- [ ] Current Focus updated to Week 14 (Hardened Prompt Injection Defence)
 
 **Stretch (if attempted)**
 - [ ] `webhook.test.ts` with 3 test cases (invalid sig, created, deleted)
-- [ ] `docs/TESTING.md` documenting all 4 test layers
+- [ ] `docs/TESTING.md` documenting all 3 test layers with the three-tier Playwright rule
 
 ---
 
@@ -1010,18 +917,18 @@ No real database needed — these run entirely against mocked Supabase responses
 
 ---
 
-### Group 5 — CI Pipeline
+### Group 5 — CI Verification
 
 **Prerequisite:** push all commits to GitHub before this group.
 
 | Test | Expected result |
 |---|---|
-| Visit `https://github.com/<username>/agentforge/actions` | CI workflow visible in list |
-| Most recent run | All jobs show green ✓ |
-| Click into the `test` job | Shows `npm ci`, `npx tsc --noEmit`, `npm test` all ✓ |
-| **Deliberate failure test:** push a commit with a broken assertion | CI shows red ✗ on the `test` job |
-| Push revert commit | CI shows green ✓ again |
-| Pull request to main | CI runs automatically on the PR (if PRs are in your workflow) |
+| Visit `https://github.com/<username>/rudderly/actions` | CI workflow visible in list |
+| Most recent run on a PR | 4 jobs visible: `type-check-and-lint`, `unit-tests`, `build`, `e2e` (all from Week 11) |
+| `unit-tests` job | Green ✅ — no longer shows as skipped (was skipped before `vitest.config.ts` existed) |
+| Click into `unit-tests` job | Shows `npm test` step with ✅ output — test file names and pass counts visible |
+| **Deliberate failure:** push a broken assertion | `unit-tests` shows red ❌ — other jobs unaffected (they run in parallel) |
+| Push revert commit | `unit-tests` shows green ✅ again |
 
 ---
 
@@ -1035,7 +942,7 @@ No real database needed — these run entirely against mocked Supabase responses
 | Invalid signature test | ✓ for "returns 400 for invalid webhook signature" |
 | subscription.created test | ✓ for "upgrades user to Pro on subscription.created" |
 | subscription.deleted test | ✓ for "downgrades user on subscription.deleted" |
-| `cat docs/TESTING.md` | File exists with 4-layer table and running instructions |
+| `cat docs/TESTING.md` | File exists with three-layer table and running instructions |
 
 ---
 

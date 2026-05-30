@@ -11,9 +11,10 @@
 - Week 8: Multi-turn agentic tool loop (5 tools, SSE streaming, attribution), agent edit, tool logging.
 - Week 9: Conversation persistence (sidebar, auto-titles, `?c=` routing, context window), public share pages (auto-slug, OG, clone, view counter), Vitest unit + Playwright E2E tests.
 - Week 10: Stripe Checkout, freemium tier enforcement (free/Pro limits + webhook), Upstash rate limiting, prompt injection defence, security audit (18 routes, all HIGH/MEDIUM fixed); stretch: Resend emails, Customer Portal, admin dashboard.
+- Week 12: Pre-launch infrastructure — `/changelog`, `/press`, `/feedback` pages deployed, waitlist with Resend + Supabase dedup, `LAUNCH_METRICS.md` baseline; stretch: `BETA_FEEDBACK.md` and `BUILD_RETROSPECTIVE.md` templates, beta recruitment begun.
 
-## Current Focus (Week 12)
-Pre-launch infrastructure — changelog page, press kit, feedback form (Tally), waitlist (Resend global contacts + Supabase waitlist table), LAUNCH_METRICS.md baseline, README update, closed beta recruitment.
+## Current Focus (Week 13)
+Testing Foundation — unit tests, API route tests, and CI integration (Phase 5: Code Quality & Security).
 
 ## Memory Rules (Claude must always follow these)
 - Keep this CLAUDE.md under 4,000 characters total; flag if approaching limit
